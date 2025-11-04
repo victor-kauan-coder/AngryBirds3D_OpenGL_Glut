@@ -6,8 +6,9 @@
 #include <sstream>
 #include <string>
 #include <map>
-
+#include <windows.h>
 // --- ESTRUTURAS DE DADOS ---
+using namespace std;
 
 struct Color {
     GLfloat r, g, b;
@@ -231,10 +232,22 @@ void display() {
 // --- FUNÇÃO PRINCIPAL ---
 
 int main(int argc, char** argv) {
-    
-    // ⚠️ MUDANÇA CRÍTICA AQUI: Usando o nome correto do arquivo (estilingue.obj)
-    // E o caminho completo que você estava usando para manter a consistência.
-    loadOBJ("C://Users//kauan//Documents//Code//CG//AngryBirds3D_OpenGL_Glut//estilingue.obj"); 
+
+    char buffer[MAX_PATH];
+    GetCurrentDirectoryA(MAX_PATH, buffer);
+
+    string dir = buffer;
+
+    if (dir.back() != '\\' && dir.back() != '/')
+        dir += '\\';
+
+    dir += "\\..\\Objetos\\";;
+    string arquivo = "estilingue.obj";
+    string caminho_completo = dir + arquivo;
+
+    cout << "Caminho completo: " << caminho_completo << endl;
+
+    loadOBJ(caminho_completo.c_str());
 
     if (vertices.empty() || face_groups.empty()) {
         std::cerr << "Falha ao carregar o modelo. Encerrando." << std::endl;
