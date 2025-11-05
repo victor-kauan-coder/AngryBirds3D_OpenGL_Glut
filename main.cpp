@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
         dir += '\\';
 
     dir += "\\..\\Objetos\\";;
-    string arquivo = "estilingue.obj";
+    string arquivo = "estilinguee.obj";
     string caminho_completo = dir + arquivo;
 
     cout << "Caminho completo: " << caminho_completo << endl;
