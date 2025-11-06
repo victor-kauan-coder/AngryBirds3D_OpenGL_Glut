@@ -246,8 +246,8 @@ int main(int argc, char** argv) {
     if (dir.back() != '\\' && dir.back() != '/')
         dir += '/';
 
-    dir += "Objetos/";
-    string arquivo = "estilingue.obj";
+    dir += "\\..\\Objetos\\";;
+    string arquivo = "estilinguee.obj";
     string caminho_completo = dir + arquivo;
 
     cout << "Caminho completo: " << caminho_completo << endl;
