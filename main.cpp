@@ -1,5 +1,8 @@
 #include <GL/glut.h>
 #include <GL/glu.h>
+// Agora, use o caminho padrão do Bullet
+#include <bullet/btBulletDynamicsCommon.h>
+// #include <bullet/btVector3.h> // Exemplo de outro header
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -99,6 +102,8 @@ std::string get_path(const std::string& full_path) {
 void loadOBJ(const char* obj_path) {
     std::ifstream file(obj_path);
     if (!file.is_open()) {
+        cout << "Caminho do arquivo OBJ: " << obj_path << endl;
+        // C:\Users\davi5\UFPI\4_periodo\AngryBirds3D_OpenGL_Glut\Objetos\estilingue.obj
         std::cerr << "ERRO OBJ: Nao foi possivel abrir o arquivo OBJ: " << obj_path << std::endl;
         return;
     }
@@ -239,9 +244,9 @@ int main(int argc, char** argv) {
     string dir = buffer;
 
     if (dir.back() != '\\' && dir.back() != '/')
-        dir += '\\';
+        dir += '/';
 
-    dir += "\\..\\Objetos\\";;
+    dir += "Objetos/";
     string arquivo = "estilingue.obj";
     string caminho_completo = dir + arquivo;
 
