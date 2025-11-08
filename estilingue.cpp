@@ -1,6 +1,6 @@
 #include <GL/glut.h>
 #include <GL/glu.h>
-#include <btBulletDynamicsCommon.h>
+#include <bullet/btBulletDynamicsCommon.h>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -8,6 +8,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "Loads.h"
+#include "passaros/passaro.h"
+#include "passaros/Red.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -15,11 +18,11 @@
 const int WIDTH = 1280;
 const int HEIGHT = 720;
 
-// Mundo de fÃ­sica Bullet
+// Mundo de física Bullet
 btDiscreteDynamicsWorld* dynamicsWorld;
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
 btCollisionShape* projectileShape = nullptr;
-btRigidBody* projectileBody = nullptr;
+// btRigidBody* projectileBody = nullptr; // REMOVIDO: Agora usa red->getRigidBody()
 btCollisionShape* boxShape = nullptr;
 
 btBroadphaseInterface* broadphase = nullptr;
@@ -28,261 +31,8 @@ btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
 
 // NOVO: Estrutura para Material MTL
-struct Material {
-    std::string name;
-    float ambient[3] = {0.2f, 0.2f, 0.2f};
-    float diffuse[3] = {0.8f, 0.8f, 0.8f};
-    float specular[3] = {0.0f, 0.0f, 0.0f};
-    float shininess = 0.0f;
-    
-    void apply() {
-        GLfloat Ka[] = {ambient[0], ambient[1], ambient[2], 1.0f};
-        GLfloat Kd[] = {diffuse[0], diffuse[1], diffuse[2], 1.0f};
-        GLfloat Ks[] = {specular[0], specular[1], specular[2], 1.0f};
-        
-        glMaterialfv(GL_FRONT, GL_AMBIENT, Ka);
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, Kd);
-        glMaterialfv(GL_FRONT, GL_SPECULAR, Ks);
-        glMaterialf(GL_FRONT, GL_SHININESS, shininess);
-    }
-};
-
 // NOVO: Estrutura para carregar e renderizar modelos OBJ com MTL
-struct OBJModel {
-    std::vector<float> vertices;
-    std::vector<float> normals;
-    std::vector<unsigned int> indices;
-    std::vector<Material> materials;
-    Material currentMaterial;
-    bool hasMaterial = false;
-    
-    bool loadMTL(const char* filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            printf("Aviso: Arquivo MTL %s nao encontrado\n", filename);
-            return false;
-        }
-        
-        Material* currentMat = nullptr;
-        std::string line;
-        
-        while (std::getline(file, line)) {
-            std::istringstream iss(line);
-            std::string prefix;
-            iss >> prefix;
-            
-            if (prefix == "newmtl") {
-                materials.push_back(Material());
-                currentMat = &materials.back();
-                iss >> currentMat->name;
-                printf("  Material: %s\n", currentMat->name.c_str());
-            }
-            else if (currentMat) {
-                if (prefix == "Ka") {
-                    iss >> currentMat->ambient[0] >> currentMat->ambient[1] >> currentMat->ambient[2];
-                }
-                else if (prefix == "Kd") {
-                    iss >> currentMat->diffuse[0] >> currentMat->diffuse[1] >> currentMat->diffuse[2];
-                }
-                else if (prefix == "Ks") {
-                    iss >> currentMat->specular[0] >> currentMat->specular[1] >> currentMat->specular[2];
-                }
-                else if (prefix == "Ns") {
-                    iss >> currentMat->shininess;
-                }
-            }
-        }
-        
-        file.close();
-        
-        if (!materials.empty()) {
-            currentMaterial = materials[0];
-            hasMaterial = true;
-            printf("  Carregados %zu materiais do MTL\n", materials.size());
-        }
-        
-        return true;
-    }
-    
-    bool loadFromFile(const char* filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            printf("Erro: Nao foi possivel abrir arquivo %s\n", filename);
-            return false;
-        }
-        
-        std::vector<float> temp_vertices;
-        std::vector<float> temp_normals;
-        std::vector<unsigned int> vertex_indices, normal_indices;
-        
-        std::string mtlFilename;
-        
-        float minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
-        float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
-        
-        std::string line;
-        while (std::getline(file, line)) {
-            std::istringstream iss(line);
-            std::string prefix;
-            iss >> prefix;
-            
-            if (prefix == "mtllib") {
-                iss >> mtlFilename;
-                printf("Arquivo MTL referenciado: %s\n", mtlFilename.c_str());
-                
-                const char* mtlPaths[] = {
-                    (std::string("Objetos/") + mtlFilename).c_str(),
-                    (std::string("./Objetos/") + mtlFilename).c_str(),
-                    (std::string("../Objetos/") + mtlFilename).c_str(),
-                    mtlFilename.c_str()
-                };
-                
-                bool mtlLoaded = false;
-                for (int i = 0; i < 4; i++) {
-                    if (loadMTL(mtlPaths[i])) {
-                        mtlLoaded = true;
-                        break;
-                    }
-                }
-                
-                if (!mtlLoaded) {
-                    loadMTL(mtlFilename.c_str());
-                }
-            }
-            else if (prefix == "usemtl") {
-                std::string matName;
-                iss >> matName;
-                for (auto& mat : materials) {
-                    if (mat.name == matName) {
-                        currentMaterial = mat;
-                        printf("Usando material: %s\n", matName.c_str());
-                        break;
-                    }
-                }
-            }
-            else if (prefix == "v") {
-                float x, y, z;
-                iss >> x >> y >> z;
-                temp_vertices.push_back(x);
-                temp_vertices.push_back(y);
-                temp_vertices.push_back(z);
-                
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-                if (z < minZ) minZ = z;
-                if (z > maxZ) maxZ = z;
-            }
-            else if (prefix == "vn") {
-                float nx, ny, nz;
-                iss >> nx >> ny >> nz;
-                temp_normals.push_back(nx);
-                temp_normals.push_back(ny);
-                temp_normals.push_back(nz);
-            }
-            else if (prefix == "f") {
-                std::string vertex1, vertex2, vertex3;
-                iss >> vertex1 >> vertex2 >> vertex3;
-                
-                auto parseFaceVertex = [](const std::string& str, unsigned int& v_idx, unsigned int& n_idx) {
-                    size_t slash1 = str.find('/');
-                    if (slash1 == std::string::npos) {
-                        v_idx = std::stoi(str);
-                        n_idx = 0;
-                    } else {
-                        v_idx = std::stoi(str.substr(0, slash1));
-                        size_t slash2 = str.find('/', slash1 + 1);
-                        if (slash2 != std::string::npos && slash2 > slash1 + 1) {
-                            n_idx = std::stoi(str.substr(slash2 + 1));
-                        } else if (slash2 != std::string::npos) {
-                            n_idx = std::stoi(str.substr(slash2 + 1));
-                        } else {
-                            n_idx = 0;
-                        }
-                    }
-                };
-                
-                unsigned int v1, v2, v3, n1, n2, n3;
-                parseFaceVertex(vertex1, v1, n1);
-                parseFaceVertex(vertex2, v2, n2);
-                parseFaceVertex(vertex3, v3, n3);
-                
-                vertex_indices.push_back(v1 - 1);
-                vertex_indices.push_back(v2 - 1);
-                vertex_indices.push_back(v3 - 1);
-                
-                if (n1 > 0) normal_indices.push_back(n1 - 1);
-                if (n2 > 0) normal_indices.push_back(n2 - 1);
-                if (n3 > 0) normal_indices.push_back(n3 - 1);
-            }
-        }
-        
-        file.close();
-        
-        float sizeX = maxX - minX;
-        float sizeY = maxY - minY;
-        float sizeZ = maxZ - minZ;
-        float maxSize = std::max(std::max(sizeX, sizeY), sizeZ);
-        
-        float normalizeScale = 0.6f / maxSize;
-        float centerX = (minX + maxX) / 2.0f;
-        float centerY = (minY + maxY) / 2.0f;
-        float centerZ = (minZ + maxZ) / 2.0f;
-        
-        printf("Modelo original: tamanho %.2f x %.2f x %.2f\n", sizeX, sizeY, sizeZ);
-        printf("Normalizando com escala: %.4f\n", normalizeScale);
-        
-        for (size_t i = 0; i < temp_vertices.size(); i += 3) {
-            temp_vertices[i] = (temp_vertices[i] - centerX) * normalizeScale;
-            temp_vertices[i + 1] = (temp_vertices[i + 1] - centerY) * normalizeScale;
-            temp_vertices[i + 2] = (temp_vertices[i + 2] - centerZ) * normalizeScale;
-        }
-        
-        for (size_t i = 0; i < vertex_indices.size(); i++) {
-            unsigned int v_idx = vertex_indices[i];
-            vertices.push_back(temp_vertices[v_idx * 3]);
-            vertices.push_back(temp_vertices[v_idx * 3 + 1]);
-            vertices.push_back(temp_vertices[v_idx * 3 + 2]);
-            
-            if (i < normal_indices.size()) {
-                unsigned int n_idx = normal_indices[i];
-                normals.push_back(temp_normals[n_idx * 3]);
-                normals.push_back(temp_normals[n_idx * 3 + 1]);
-                normals.push_back(temp_normals[n_idx * 3 + 2]);
-            }
-            
-            indices.push_back(i);
-        }
-        
-        printf("Modelo OBJ carregado: %zu vertices, %zu triangulos\n", 
-               vertices.size() / 3, indices.size() / 3);
-        return true;
-    }
-    
-    void draw() {
-        if (vertices.empty()) return;
-        
-        if (hasMaterial) {
-            currentMaterial.apply();
-        }
-        
-        glEnableClientState(GL_VERTEX_ARRAY);
-        glVertexPointer(3, GL_FLOAT, 0, vertices.data());
-        
-        if (!normals.empty()) {
-            glEnableClientState(GL_NORMAL_ARRAY);
-            glNormalPointer(GL_FLOAT, 0, normals.data());
-        }
-        
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, indices.data());
-        
-        glDisableClientState(GL_VERTEX_ARRAY);
-        if (!normals.empty()) {
-            glDisableClientState(GL_NORMAL_ARRAY);
-        }
-    }
-};
+
 
 // Modelos OBJ globais
 OBJModel treeModel;
@@ -376,7 +126,7 @@ bool gameOver = false;
 float pullDepth = 0.0f;
 
 std::vector<btRigidBody*> targetBodies;
-
+PassaroRed* red;
 btRigidBody* createTargetBox(float mass, const btVector3& position) {
     btTransform startTransform;
     startTransform.setIdentity();
@@ -422,7 +172,6 @@ void initBullet() {
     groundRigidBody->setRestitution(0.3f);
     
     dynamicsWorld->addRigidBody(groundRigidBody);
-    
     projectileShape = new btSphereShape(0.3f);
     collisionShapes.push_back(projectileShape);
     
@@ -469,11 +218,9 @@ void initBullet() {
 }
 
 void clearProjectile() {
-    if (projectileBody) {
-        dynamicsWorld->removeRigidBody(projectileBody);
-        delete projectileBody->getMotionState();
-        delete projectileBody;
-        projectileBody = nullptr;
+    if (red && red->getRigidBody()) {
+        red->limparFisica();
+        // projectileBody = nullptr; // Não é mais necessário
     }
 }
 
@@ -488,24 +235,16 @@ void createProjectileInPouch() {
     slingshot.pouchY = restY;
     slingshot.pouchZ = restZ;
     
-    btDefaultMotionState* motionState = new btDefaultMotionState(
-        btTransform(btQuaternion(0, 0, 0, 1), btVector3(restX, restY, restZ)));
+    // SIMPLIFICADO: inicializarFisica já cria tudo!
+    red->inicializarFisica(dynamicsWorld, restX, restY, restZ);
     
-    btVector3 localInertia(0, 0, 0);
-    float mass = 1.0f;
-    projectileShape->calculateLocalInertia(mass, localInertia);
-    
-    btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, motionState, projectileShape, localInertia);
-    projectileBody = new btRigidBody(rbInfo);
-    
-    projectileBody->setRestitution(0.6f);
-    projectileBody->setFriction(0.5f);
-    projectileBody->setRollingFriction(0.1f);
-    
-    projectileBody->setCollisionFlags(projectileBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-    projectileBody->setActivationState(DISABLE_DEACTIVATION);
-    
-    dynamicsWorld->addRigidBody(projectileBody);
+    // Configura propriedades físicas adicionais
+    if (red->getRigidBody()) {
+        red->getRigidBody()->setCollisionFlags(
+            red->getRigidBody()->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT
+        );
+        red->getRigidBody()->setActivationState(DISABLE_DEACTIVATION);
+    }
 }
 
 void drawCylinder(float x1, float y1, float z1, float x2, float y2, float z2, float radius) {
@@ -690,7 +429,7 @@ void drawGround() {
 }
 
 bool isTargetInAimLine(btRigidBody* target) {
-    if (!slingshot.isPulling || !projectileBody) return false;
+    if (!slingshot.isPulling || !red || !red->getRigidBody()) return false;
     
     float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
     float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
@@ -728,7 +467,7 @@ bool isTargetInAimLine(btRigidBody* target) {
 }
 
 void drawAimLine() {
-    if (slingshot.isPulling && projectileBody) {
+    if (slingshot.isPulling && red && red->getRigidBody()) {
         glDisable(GL_LIGHTING);
         
         float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
@@ -855,7 +594,7 @@ void drawHUD() {
 }
 
 void updateElasticPhysics() {
-    if (!slingshot.isPulling && !projectileBody) {
+    if (!slingshot.isPulling && red && red->getRigidBody()) {
         float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
         float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
         float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
@@ -925,12 +664,12 @@ void updatePouchPosition() {
         slingshot.pouchY = startPouchY + dy;
         slingshot.pouchZ = startPouchZ + dz;
         
-        if (projectileBody) {
+        if (red->getRigidBody()) {
             btTransform trans;
-            projectileBody->getMotionState()->getWorldTransform(trans);
+            red->getRigidBody()->getMotionState()->getWorldTransform(trans);
             trans.setOrigin(btVector3(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ));
-            projectileBody->getMotionState()->setWorldTransform(trans);
-            projectileBody->setWorldTransform(trans);
+            red->getRigidBody()->getMotionState()->setWorldTransform(trans);
+            red->getRigidBody()->setWorldTransform(trans);
         }
     }
 }
@@ -1003,7 +742,7 @@ void mouse(int button, int state, int x, int y) {
             }
             
         } else {
-            if (mousePressed && slingshot.isPulling && projectileBody) {
+            if (mousePressed && slingshot.isPulling && red && red->getRigidBody()) {
                 printf("Lancando projetil!\n");
                 
                 float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
@@ -1014,22 +753,22 @@ void mouse(int button, int state, int x, int y) {
                 float impulseY = restY - slingshot.pouchY;
                 float impulseZ = restZ - slingshot.pouchZ;
                 
-                projectileBody->setCollisionFlags(projectileBody->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
-                projectileBody->forceActivationState(ACTIVE_TAG);
+                red->getRigidBody()->setCollisionFlags(red->getRigidBody()->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
+                red->getRigidBody()->forceActivationState(ACTIVE_TAG);
                 
-                projectileBody->setRestitution(0.6f);
-                projectileBody->setFriction(0.5f);
-                projectileBody->setRollingFriction(0.1f);
-                projectileBody->setDamping(0.05f, 0.1f);
+                red->getRigidBody()->setRestitution(0.6f);
+                red->getRigidBody()->setFriction(0.5f);
+                red->getRigidBody()->setRollingFriction(0.1f);
+                red->getRigidBody()->setDamping(0.05f, 0.1f);
                 
-                projectileBody->setLinearVelocity(btVector3(0,0,0));
-                projectileBody->setAngularVelocity(btVector3(0,0,0));
+                red->getRigidBody()->setLinearVelocity(btVector3(0,0,0));
+                red->getRigidBody()->setAngularVelocity(btVector3(0,0,0));
                 
                 float forceMagnitude = 20.0f;
                 btVector3 impulse(impulseX * forceMagnitude, impulseY * forceMagnitude, impulseZ * forceMagnitude);
-                projectileBody->applyCentralImpulse(impulse);
+                red->getRigidBody()->applyCentralImpulse(impulse);
                 
-                projectileBody = nullptr;
+                // projectileBody = nullptr; // Não é mais necessário
                 shotsRemaining--;
                 
                 if (shotsRemaining <= 0) {
@@ -1198,7 +937,7 @@ void display() {
             btCollisionShape* shape = body->getCollisionShape();
             
             // MODIFICADO: Desenhar modelo OBJ red.obj ao invÃ©s da esfera
-            if (body == projectileBody) {
+            if (red && body == red->getRigidBody()) {
                 glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
                 
                 if (projectileModelLoaded) {
@@ -1427,6 +1166,9 @@ int main(int argc, char** argv) {
     
     init();
     
+    // CRÍTICO: Criar o objeto red ANTES de usar!
+    red = new PassaroRed(0.0f, 0.0f, 0.0f);
+    
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
@@ -1438,8 +1180,13 @@ int main(int argc, char** argv) {
     
     glutMainLoop();
     
-    clearProjectile();
+    // Limpeza
+    if (red) {
+        delete red;  // O destrutor de Passaro já limpa a física
+        red = nullptr;
+    }
     
+    // Limpa os target bodies
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
