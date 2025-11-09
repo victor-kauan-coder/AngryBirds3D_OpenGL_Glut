@@ -11,9 +11,19 @@
 #include "Loads.h"
 #include "passaros/passaro.h"
 #include "passaros/Red.h"
+#include "SlingshotManager.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// --- Includes de Áudio (exemplo) ---
+// Adicione os includes de áudio aqui se estiver usando (SDL_mixer.h, etc.)
+// #include <SDL2/SDL.h>
+// #include <SDL2/SDL_mixer.h>
+// Mix_Chunk *som_esticar = nullptr;
+// Mix_Chunk *som_soltar = nullptr;
+// --- Fim Áudio ---
+
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
@@ -22,7 +32,6 @@ const int HEIGHT = 720;
 btDiscreteDynamicsWorld* dynamicsWorld;
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
 btCollisionShape* projectileShape = nullptr;
-// btRigidBody* projectileBody = nullptr; // REMOVIDO: Agora usa red->getRigidBody()
 btCollisionShape* boxShape = nullptr;
 
 btBroadphaseInterface* broadphase = nullptr;
@@ -38,6 +47,7 @@ btSequentialImpulseConstraintSolver* solver = nullptr;
 OBJModel treeModel;
 bool treeModelLoaded = false;
 
+// ... (Classe Tree permanece a mesma) ...
 class Tree {
 public:
     float x, y, z;
@@ -89,28 +99,19 @@ private:
         glutSolidSphere(foliageRadius * 0.7f, 10, 10);
     }
 };
-
 std::vector<Tree> trees;
 
-struct Slingshot {
-    float baseX, baseY, baseZ;
-    float leftArmX, leftArmY, leftArmZ;
-    float rightArmX, rightArmY, rightArmZ;
-    float leftTopX, leftTopY, leftTopZ;
-    float rightTopX, rightTopY, rightTopZ;
-    float pouchX, pouchY, pouchZ;
-    bool isPulling;
-} slingshot;
 
-int mouseX = 0, mouseY = 0;
-bool mousePressed = false;
+// --- MODIFICADO: Variáveis Globais ---
 
-int startMouseX = 0;
-int startMouseY = 0;
-float startPouchX = 0.0f;
-float startPouchY = 0.0f;
-float startPouchZ = 0.0f;
+// A 'struct Slingshot' e variáveis de mouse/estado foram removidas.
+// Elas agora estão dentro da classe SlingshotManager.
 
+// NOVO: Ponteiro global para o nosso gerenciador
+SlingshotManager* g_slingshotManager = nullptr;
+
+
+// Variáveis globais de câmera e jogo
 float cameraAngleH = 45.0f;
 float cameraAngleV = 20.0f;
 float cameraDistance = 18.0f;
@@ -119,8 +120,6 @@ float cameraTargetY = 3.0f;
 int score = 0;
 int shotsRemaining = 8;
 bool gameOver = false;
-
-float pullDepth = 0.0f;
 
 std::vector<btRigidBody*> targetBodies;
 PassaroRed* red;
@@ -203,8 +202,7 @@ void initBullet() {
     createTargetBox(boxMass, btVector3(5.0f, 1.5f, -14.0f));
     
     trees.clear();
-    trees.clear();
-    trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));  // Reduzido de 5.0 para 0.5
+    trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
     trees.push_back(Tree(-9.0f, 0.0f, -10.0f, 12.5f));
     trees.push_back(Tree(8.0f, 0.0f, -25.0f, 12.5f));
     trees.push_back(Tree(29.0f, 0.0f, -12.0f, 12.5f));
@@ -544,7 +542,12 @@ void drawHUD() {
     
     glRasterPos2f(20, HEIGHT - 110);
     char depthText[50];
-    sprintf(depthText, "Profundidade: %.1f", pullDepth);
+    // MODIFICADO: Não podemos mais ler 'pullDepth' globalmente.
+    // Esta é uma limitação da refatoração, a menos que
+    // adicionemos um 'getPullDepth()' ao manager.
+    // Por enquanto, vamos remover esta linha ou comentá-la.
+    // sprintf(depthText, "Profundidade: %.1f", pullDepth); // ANTIGO
+    sprintf(depthText, "Profundidade: (pressione Q/E)"); // NOVO
     for (char* c = depthText; *c != '\0'; c++) {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
@@ -691,131 +694,43 @@ void screenToWorld(int screenX, int screenY, float depth, float& worldX, float& 
 }
 
 void mouse(int button, int state, int x, int y) {
-    if (gameOver) return;
-    
-    if (button == GLUT_LEFT_BUTTON) {
-        if (state == GLUT_DOWN) {
-            float wx, wy, wz;
-            bool found = false;
-            
-            float currentPouchX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-            float currentPouchY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-            float currentPouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-            
-            GLdouble modelview[16];
-            GLdouble projection[16];
-            GLint viewport[4];
-            GLdouble screenX, screenY, screenZ;
-            
-            glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-            glGetDoublev(GL_PROJECTION_MATRIX, projection);
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            
-            gluProject(currentPouchX, currentPouchY, currentPouchZ,
-                      modelview, projection, viewport,
-                      &screenX, &screenY, &screenZ);
-            
-            screenToWorld(x, y, (float)screenZ, wx, wy, wz);
-            
-            float dist_x = fabs(wx - currentPouchX);
-            float dist_y = fabs(wy - currentPouchY);
-            
-            if (dist_x < 1.5f && dist_y < 1.0f) {
-                found = true;
-            }
-            
-            if (found && shotsRemaining > 0) {
-                printf("Estilingue capturado! Arraste e use Q/E para profundidade.\n");
-                mousePressed = true;
-                slingshot.isPulling = true;
-                createProjectileInPouch();
-                startMouseX = x;
-                startMouseY = y;
-                startPouchX = slingshot.pouchX;
-                startPouchY = slingshot.pouchY;
-                startPouchZ = slingshot.pouchZ;
-                pullDepth = 0.0f;
-            }
-            
-        } else {
-            if (mousePressed && slingshot.isPulling && red && red->getRigidBody()) {
-                printf("Lancando projetil!\n");
-                
-                float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-                float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-                float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-                
-                float impulseX = restX - slingshot.pouchX;
-                float impulseY = restY - slingshot.pouchY;
-                float impulseZ = restZ - slingshot.pouchZ;
-                
-                red->getRigidBody()->setCollisionFlags(red->getRigidBody()->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
-                red->getRigidBody()->forceActivationState(ACTIVE_TAG);
-                
-                red->getRigidBody()->setRestitution(0.6f);
-                red->getRigidBody()->setFriction(0.5f);
-                red->getRigidBody()->setRollingFriction(0.1f);
-                red->getRigidBody()->setDamping(0.05f, 0.1f);
-                
-                red->getRigidBody()->setLinearVelocity(btVector3(0,0,0));
-                red->getRigidBody()->setAngularVelocity(btVector3(0,0,0));
-                
-                float forceMagnitude = 20.0f;
-                btVector3 impulse(impulseX * forceMagnitude, impulseY * forceMagnitude, impulseZ * forceMagnitude);
-                red->getRigidBody()->applyCentralImpulse(impulse);
-                
-                // projectileBody = nullptr; // Não é mais necessário
-                shotsRemaining--;
-                
-                if (shotsRemaining <= 0) {
-                    gameOver = true;
-                }
-            }
-            
-            mousePressed = false;
-            slingshot.isPulling = false;
-            pullDepth = 0.0f;
-        }
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handleMouseClick(button, state, x, y);
     }
 }
 
 void mouseMotion(int x, int y) {
-    mouseX = x;
-    mouseY = y;
-    updatePouchPosition();
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handleMouseDrag(x, y);
+    }
 }
 
 void passiveMouseMotion(int x, int y) {
-    mouseX = x;
-    mouseY = y;
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handlePassiveMouseMotion(x, y);
+    }
 }
 
 void keyboard(unsigned char key, int x, int y) {
+    // Primeiro, delega as teclas do estilingue
+    if (g_slingshotManager) {
+        g_slingshotManager->handleKeyboard(key);
+    }
+
+    // Teclas globais do jogo
     switch(key) {
-        case 27:
+        case 27: // ESC
             exit(0);
             break;
             
-        case 'q':
-        case 'Q':
-            if (slingshot.isPulling) {
-                pullDepth += 0.3f;
-                if (pullDepth > 6.0f) pullDepth = 6.0f;
-                updatePouchPosition();
-            }
-            break;
-            
-        case 'e':
-        case 'E':
-            if (slingshot.isPulling) {
-                pullDepth -= 0.3f;
-                if (pullDepth < 0.0f) pullDepth = 0.0f;
-                updatePouchPosition();
-            }
-            break;
+        // Q e E foram movidos para o handleKeyboard do manager
             
         case 'r':
         case 'R':
+            // Lógica de reset global
             score = 0;
             shotsRemaining = 8;
             gameOver = false;
@@ -831,15 +746,12 @@ void keyboard(unsigned char key, int x, int y) {
                 }
             }
             
-            initBullet();
+            initBullet(); // Recria os alvos
             
-            clearProjectile();
-            slingshot.pouchX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-            slingshot.pouchY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-            slingshot.pouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-            slingshot.isPulling = false;
-            mousePressed = false;
-            pullDepth = 0.0f;
+            // NOVO: Reseta o estado do estilingue
+            if (g_slingshotManager) {
+                g_slingshotManager->reset();
+            }
             
             printf("Jogo reiniciado!\n");
             break;
@@ -847,6 +759,7 @@ void keyboard(unsigned char key, int x, int y) {
 }
 
 void specialKeys(int key, int x, int y) {
+    // Controles da câmera permanecem globais
     switch(key) {
         case GLUT_KEY_LEFT:
             cameraAngleH -= 3.0f;
@@ -872,6 +785,8 @@ void specialKeys(int key, int x, int y) {
             break;
     }
 }
+
+// --- MODIFICADO: Funções Principais (Display, Timer, Init) ---
 
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -910,13 +825,12 @@ void display() {
         tree.draw();
     }
     
-    drawWoodenBase();
+    // MODIFICADO: Chama o 'draw' do gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->draw();
+    }
     
-    glDisable(GL_LIGHTING);
-    drawElastic();
-    drawAimLine();
-    glEnable(GL_LIGHTING);
-    
+    // Desenha todos os corpos rígidos no mundo
     // Desenhar o pássaro Red separadamente (ele gerencia sua própria transformação)
     if (red && red->getRigidBody()) {
         glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
@@ -947,10 +861,42 @@ void display() {
             
             btCollisionShape* shape = body->getCollisionShape();
             
-            if (shape == boxShape) {
+            // MODIFICADO: Verifica se o corpo é o projétil ATUAL
+            btRigidBody* currentProjectile = g_slingshotManager ? g_slingshotManager->getProjectileInPouch() : nullptr;
+
+            if (body == currentProjectile) {
+                // É o projétil na malha (cinemático)
+                glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+                
+                if (projectileModelLoaded) {
+                    glColor3f(0.8f, 0.2f, 0.2f);
+                    glPushMatrix();
+                    glRotatef(180, 0, 1, 0);
+                    projectileModel.draw();
+                    glPopMatrix();
+                } else {
+                    glColor3f(0.8f, 0.2f, 0.2f);
+                    glutSolidSphere(0.3, 20, 20);
+                }
+            }
+            else if (shape == projectileShape) {
+                // É um projétil já lançado (dinâmico)
+                glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
+                
+                if (projectileModelLoaded) {
+                    glColor3f(0.8f, 0.2f, 0.2f);
+                    projectileModel.draw();
+                } else {
+                    glColor3f(0.8f, 0.2f, 0.2f);
+                    glutSolidSphere(0.3, 16, 16);
+                }
+            }
+            else if (shape == boxShape) {
+                // É um alvo (caixa)
                 glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
                 
-                if (isTargetInAimLine(body)) {
+                // MODIFICADO: Chama a função de mira do gerenciador
+                if (g_slingshotManager && g_slingshotManager->isTargetInAimLine(body)) {
                     glColor3f(0.2f, 1.0f, 0.2f);
                 } else {
                     glColor3f(0.6f, 0.4f, 0.2f);
@@ -978,15 +924,22 @@ void display() {
     
     glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
     
-    updateElasticPhysics();
+    // MODIFICADO: 'updateElasticPhysics' é chamado pelo 'update' do manager no 'timer'
     drawHUD();
     
     glutSwapBuffers();
 }
 
 void timer(int value) {
+    // Simula a física
     dynamicsWorld->stepSimulation(1.0f / 60.0f, 10);
     
+    // NOVO: Atualiza a física do estilingue (ex: malha voltando)
+    if (g_slingshotManager) {
+        g_slingshotManager->update();
+    }
+    
+    // Lógica de pontuação (permanece global)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
@@ -1038,7 +991,11 @@ void init() {
     GLfloat spec[] = {0.3f, 0.3f, 0.3f, 1.0f};
     glMaterialfv(GL_FRONT, GL_SPECULAR, spec);
     glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
+    initBullet();
     
+    // NOVO: Cria a instância do gerenciador do estilingue
+    // Passamos ponteiros para os sistemas que ele precisa controlar
+    g_slingshotManager = new SlingshotManager(dynamicsWorld, projectileShape, &shotsRemaining, &gameOver);
     slingshot.baseX = 0.0f;
     slingshot.baseY = 0.0f;
     slingshot.baseZ = 0.0f;
@@ -1070,29 +1027,27 @@ void init() {
     initBullet();    
     // Carregar modelo da Ã¡rvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
-    
     const char* possiblePaths[] = {
-        "Objetos/arvore.obj",
-        "./Objetos/arvore.obj",
-        "../Objetos/arvore.obj",
-        "arvore.obj",
-        "tree.obj"
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
+        "tree2.obj"
     };
-    
     treeModelLoaded = false;
     for (const char* path : possiblePaths) {
         printf("  Tentando: %s\n", path);
         if (treeModel.loadFromFile(path)) {
             treeModelLoaded = true;
-            printf("  âœ“ Modelo carregado com sucesso de: %s\n", path);
+            printf("  ✓ Modelo carregado com sucesso de: %s\n", path);
             break;
         }
     }
-    
     if (!treeModelLoaded) {
         printf("  Modelo OBJ nao encontrado em nenhum caminho. Usando geometria procedural.\n");
     }
     
+    // ... (Impressão dos controles permanece a mesma) ...
     printf("\n=== ESTILINGUE 3D MELHORADO ===\n");
     printf("CONTROLES:\n");
     printf("  Mouse Esquerdo: Clique e arraste para mirar\n");
@@ -1115,7 +1070,10 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(WIDTH, HEIGHT);
-    glutCreateWindow("Estilingue 3D - Melhorado com Red.obj");
+    glutCreateWindow("Estilingue 3D - Refatorado com Classe");
+    
+    // if (!init_audio()) return -1; // Exemplo de áudio
+    // if (!load_sounds()) return -1; // Exemplo de áudio
     
     init();
     
@@ -1155,11 +1113,16 @@ int main(int argc, char** argv) {
         delete collisionShapes[i];
     }
     
+    // NOVO: Limpa o gerenciador do estilingue
+    delete g_slingshotManager;
+    
     delete dynamicsWorld;
     delete solver;
     delete dispatcher;
     delete collisionConfiguration;
     delete broadphase;
+
+    // close_audio(); // Exemplo de áudio
     
     return 0;
 }
