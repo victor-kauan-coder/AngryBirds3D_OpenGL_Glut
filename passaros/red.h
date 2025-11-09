@@ -11,8 +11,8 @@ public:
         setCor(1.0f, 0.0f, 0.0f); // Vermelho
         setMassa(1.0f);
         setTipo("Red");
-        carregarModelo("Objetos/redV2.obj");
-        carregarMTL("Objetos/redV2.mtl");
+        carregarModelo("Objetos/yellow.obj");
+        carregarMTL("Objetos/yellow.mtl");
     }
     
     void usarHabilidade() override {

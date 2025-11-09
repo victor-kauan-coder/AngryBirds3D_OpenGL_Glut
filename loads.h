@@ -275,6 +275,13 @@ struct OBJModel {
         currentMesh.material = defaultMaterial;
 
         std::string mtlFilename;
+        //NOVOO
+        std::string objPath = filename;
+        size_t lastSlash = objPath.find_last_of("/\\");
+        std::string objDir = "";
+        if (lastSlash != std::string::npos) {
+            objDir = objPath.substr(0, lastSlash + 1); // ex: "Objetos/"
+        }
         // Bounding box (para normalização)
         float minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
         float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
@@ -290,11 +297,11 @@ struct OBJModel {
                 // Carrega o arquivo de material
                 iss >> mtlFilename;
                 printf("Arquivo MTL referenciado: %s\n", mtlFilename.c_str());
+               // --- CORRIGIDO: Caminhos relativos ao OBJ ---
+                // Substitua o bloco mtlPaths[] antigo por este
                 const char* mtlPaths[] = {
-                    (std::string("Objetos/") + mtlFilename).c_str(),
-                    (std::string("./Objetos/") + mtlFilename).c_str(),
-                    (std::string("../Objetos/") + mtlFilename).c_str(),
-                    mtlFilename.c_str()
+                    (objDir + mtlFilename).c_str(), // Tenta carregar (ex: "Objetos/arvore2.mtl")
+                    mtlFilename.c_str()             // Fallback: (ex: "arvore2.mtl")
                 };
                 for (int i = 0; i < 4; i++) {
                     if (loadMTL(mtlPaths[i])) break; // Carrega e para no primeiro sucesso
@@ -437,7 +444,7 @@ struct OBJModel {
         // Aplica a normalização iterando por todos os vértices FINAIS
         for (size_t i = 0; i < vertices.size(); i += 3) {
             vertices[i] = (vertices[i] - centerX) * normalizeScale;
-            vertices[i+1] = (vertices[i+1] - centerY) * normalizeScale;
+            vertices[i+1] = (vertices[i+1] - minY) * normalizeScale;
             vertices[i+2] = (vertices[i+2] - centerZ) * normalizeScale;
         }
 

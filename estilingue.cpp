@@ -60,7 +60,7 @@ public:
         glScalef(scale, scale, scale);
         
         if (treeModelLoaded) {
-            glColor3f(0.3f, 0.5f, 0.2f);
+            // glColor3f(0.3f, 0.5f, 0.2f);
             treeModel.draw();
         } else {
             drawProceduralTree();

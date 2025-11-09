@@ -1,6 +1,6 @@
 # Blender 4.5.4 LTS
 # www.blender.org
-mtllib arvore.mtl
+#mtllib arvore.mtl
 o Cylinder_Madeira_0
 v -14.322331 3.720956 -14.322332
 v -7.914103 76.960175 -8.298576

@@ -1,6 +1,6 @@
 # Blender 4.5.4 LTS
 # www.blender.org
-mtllib arvore2.mtl
+# mtllib arvore2.mtl
 o Cylinder_Material.001_0
 v -0.000003 64.602097 -15.411538
 v -0.000003 208.958603 -15.411581
