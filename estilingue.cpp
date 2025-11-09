@@ -1072,11 +1072,11 @@ void init() {
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     
     const char* possiblePaths[] = {
-        "Objetos/arvore.obj",
-        "./Objetos/arvore.obj",
-        "../Objetos/arvore.obj",
-        "arvore.obj",
-        "tree.obj"
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
+        "tree2.obj"
     };
     
     treeModelLoaded = false;
