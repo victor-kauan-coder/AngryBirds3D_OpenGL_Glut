@@ -1,6 +1,6 @@
 #include <GL/glut.h>
 #include <GL/glu.h>
-#include <btBulletDynamicsCommon.h>
+#include <bullet/btBulletDynamicsCommon.h>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -8,6 +8,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "Loads.h"
+#include "passaros/passaro.h"
+#include "passaros/Red.h"
 #include "SlingshotManager.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,268 +39,8 @@ btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
 
-// ... (Structs Material e OBJModel permanecem as mesmas) ...
-// (O código das structs Material e OBJModel não foi colado aqui para economizar espaço,
-// mas ele deve permanecer exatamente como estava no seu arquivo original)
-struct Material {
-    std::string name;
-    float ambient[3] = {0.2f, 0.2f, 0.2f};
-    float diffuse[3] = {0.8f, 0.8f, 0.8f};
-    float specular[3] = {0.0f, 0.0f, 0.0f};
-    float shininess = 0.0f;
-    
-    void apply() {
-        GLfloat Ka[] = {ambient[0], ambient[1], ambient[2], 1.0f};
-        GLfloat Kd[] = {diffuse[0], diffuse[1], diffuse[2], 1.0f};
-        GLfloat Ks[] = {specular[0], specular[1], specular[2], 1.0f};
-        
-        glMaterialfv(GL_FRONT, GL_AMBIENT, Ka);
-        glMaterialfv(GL_FRONT, GL_DIFFUSE, Kd);
-        glMaterialfv(GL_FRONT, GL_SPECULAR, Ks);
-        glMaterialf(GL_FRONT, GL_SHININESS, shininess);
-    }
-};
-
-struct OBJModel {
-    std::vector<float> vertices;
-    std::vector<float> normals;
-    std::vector<unsigned int> indices;
-    std::vector<Material> materials;
-    Material currentMaterial;
-    bool hasMaterial = false;
-    
-    bool loadMTL(const char* filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            printf("Aviso: Arquivo MTL %s nao encontrado\n", filename);
-            return false;
-        }
-        
-        Material* currentMat = nullptr;
-        std::string line;
-        
-        while (std::getline(file, line)) {
-            std::istringstream iss(line);
-            std::string prefix;
-            iss >> prefix;
-            
-            if (prefix == "newmtl") {
-                materials.push_back(Material());
-                currentMat = &materials.back();
-                iss >> currentMat->name;
-                printf("  Material: %s\n", currentMat->name.c_str());
-            }
-            else if (currentMat) {
-                if (prefix == "Ka") {
-                    iss >> currentMat->ambient[0] >> currentMat->ambient[1] >> currentMat->ambient[2];
-                }
-                else if (prefix == "Kd") {
-                    iss >> currentMat->diffuse[0] >> currentMat->diffuse[1] >> currentMat->diffuse[2];
-                }
-                else if (prefix == "Ks") {
-                    iss >> currentMat->specular[0] >> currentMat->specular[1] >> currentMat->specular[2];
-                }
-                else if (prefix == "Ns") {
-                    iss >> currentMat->shininess;
-                }
-            }
-        }
-        
-        file.close();
-        
-        if (!materials.empty()) {
-            currentMaterial = materials[0];
-            hasMaterial = true;
-            printf("  Carregados %zu materiais do MTL\n", materials.size());
-        }
-        
-        return true;
-    }
-    
-    bool loadFromFile(const char* filename) {
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            printf("Erro: Nao foi possivel abrir arquivo %s\n", filename);
-            return false;
-        }
-        
-        std::vector<float> temp_vertices;
-        std::vector<float> temp_normals;
-        std::vector<unsigned int> vertex_indices, normal_indices;
-        
-        std::string mtlFilename;
-        
-        float minX = FLT_MAX, minY = FLT_MAX, minZ = FLT_MAX;
-        float maxX = -FLT_MAX, maxY = -FLT_MAX, maxZ = -FLT_MAX;
-        
-        std::string line;
-        while (std::getline(file, line)) {
-            std::istringstream iss(line);
-            std::string prefix;
-            iss >> prefix;
-            
-            if (prefix == "mtllib") {
-                iss >> mtlFilename;
-                printf("Arquivo MTL referenciado: %s\n", mtlFilename.c_str());
-                
-                const char* mtlPaths[] = {
-                    (std::string("Objetos/") + mtlFilename).c_str(),
-                    (std::string("./Objetos/") + mtlFilename).c_str(),
-                    (std::string("../Objetos/") + mtlFilename).c_str(),
-                    mtlFilename.c_str()
-                };
-                
-                bool mtlLoaded = false;
-                for (int i = 0; i < 4; i++) {
-                    if (loadMTL(mtlPaths[i])) {
-                        mtlLoaded = true;
-                        break;
-                    }
-                }
-                
-                if (!mtlLoaded) {
-                    loadMTL(mtlFilename.c_str());
-                }
-            }
-            else if (prefix == "usemtl") {
-                std::string matName;
-                iss >> matName;
-                for (auto& mat : materials) {
-                    if (mat.name == matName) {
-                        currentMaterial = mat;
-                        printf("Usando material: %s\n", matName.c_str());
-                        break;
-                    }
-                }
-            }
-            else if (prefix == "v") {
-                float x, y, z;
-                iss >> x >> y >> z;
-                temp_vertices.push_back(x);
-                temp_vertices.push_back(y);
-                temp_vertices.push_back(z);
-                
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
-                if (z < minZ) minZ = z;
-                if (z > maxZ) maxZ = z;
-            }
-            else if (prefix == "vn") {
-                float nx, ny, nz;
-                iss >> nx >> ny >> nz;
-                temp_normals.push_back(nx);
-                temp_normals.push_back(ny);
-                temp_normals.push_back(nz);
-            }
-            else if (prefix == "f") {
-                std::string vertex1, vertex2, vertex3;
-                iss >> vertex1 >> vertex2 >> vertex3;
-                
-                auto parseFaceVertex = [](const std::string& str, unsigned int& v_idx, unsigned int& n_idx) {
-                    size_t slash1 = str.find('/');
-                    if (slash1 == std::string::npos) {
-                        v_idx = std::stoi(str);
-                        n_idx = 0;
-                    } else {
-                        v_idx = std::stoi(str.substr(0, slash1));
-                        size_t slash2 = str.find('/', slash1 + 1);
-                        if (slash2 != std::string::npos && slash2 > slash1 + 1) {
-                            n_idx = std::stoi(str.substr(slash2 + 1));
-                        } else if (slash2 != std::string::npos) {
-                            n_idx = std::stoi(str.substr(slash2 + 1));
-                        } else {
-                            n_idx = 0;
-                        }
-                    }
-                };
-                
-                unsigned int v1, v2, v3, n1, n2, n3;
-                parseFaceVertex(vertex1, v1, n1);
-                parseFaceVertex(vertex2, v2, n2);
-                parseFaceVertex(vertex3, v3, n3);
-                
-                vertex_indices.push_back(v1 - 1);
-                vertex_indices.push_back(v2 - 1);
-                vertex_indices.push_back(v3 - 1);
-                
-                if (n1 > 0) normal_indices.push_back(n1 - 1);
-                if (n2 > 0) normal_indices.push_back(n2 - 1);
-                if (n3 > 0) normal_indices.push_back(n3 - 1);
-            }
-        }
-        
-        file.close();
-        
-        float sizeX = maxX - minX;
-        float sizeY = maxY - minY;
-        float sizeZ = maxZ - minZ;
-        float maxSize = std::max(std::max(sizeX, sizeY), sizeZ);
-        
-        float normalizeScale = 0.6f / maxSize;
-        float centerX = (minX + maxX) / 2.0f;
-        float centerY = (minY + maxY) / 2.0f;
-        float centerZ = (minZ + maxZ) / 2.0f;
-        
-        printf("Modelo original: tamanho %.2f x %.2f x %.2f\n", sizeX, sizeY, sizeZ);
-        printf("Normalizando com escala: %.4f\n", normalizeScale);
-        
-        for (size_t i = 0; i < temp_vertices.size(); i += 3) {
-            temp_vertices[i] = (temp_vertices[i] - centerX) * normalizeScale;
-            temp_vertices[i + 1] = (temp_vertices[i + 1] - centerY) * normalizeScale;
-            temp_vertices[i + 2] = (temp_vertices[i + 2] - centerZ) * normalizeScale;
-        }
-        
-        for (size_t i = 0; i < vertex_indices.size(); i++) {
-            unsigned int v_idx = vertex_indices[i];
-            vertices.push_back(temp_vertices[v_idx * 3]);
-            vertices.push_back(temp_vertices[v_idx * 3 + 1]);
-            vertices.push_back(temp_vertices[v_idx * 3 + 2]);
-            
-            if (i < normal_indices.size()) {
-                unsigned int n_idx = normal_indices[i];
-                normals.push_back(temp_normals[n_idx * 3]);
-                normals.push_back(temp_normals[n_idx * 3 + 1]);
-                normals.push_back(temp_normals[n_idx * 3 + 2]);
-            }
-            
-            indices.push_back(i);
-        }
-        
-        printf("Modelo OBJ carregado: %zu vertices, %zu triangulos\n", 
-               vertices.size() / 3, indices.size() / 3);
-        return true;
-    }
-
-    // ... (Funções de áudio de OBJModel, se existirem, permanecem) ...
-    // NOTE: As funções de áudio estavam *dentro* da sua struct OBJModel,
-    // o que é estranho. Eu as removi de dentro da struct.
-    // Se elas deveriam estar lá, coloque-as de volta.
-    
-    void draw() {
-        if (vertices.empty()) return;
-        
-        if (hasMaterial) {
-            currentMaterial.apply();
-        }
-        
-        glEnableClientState(GL_VERTEX_ARRAY);
-        glVertexPointer(3, GL_FLOAT, 0, vertices.data());
-        
-        if (!normals.empty()) {
-            glEnableClientState(GL_NORMAL_ARRAY);
-            glNormalPointer(GL_FLOAT, 0, normals.data());
-        }
-        
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, indices.data());
-        
-        glDisableClientState(GL_VERTEX_ARRAY);
-        if (!normals.empty()) {
-            glDisableClientState(GL_NORMAL_ARRAY);
-        }
-    }
-};
+// NOVO: Estrutura para Material MTL
+// NOVO: Estrutura para carregar e renderizar modelos OBJ com MTL
 
 
 // Modelos OBJ globais
@@ -382,10 +125,7 @@ int shotsRemaining = 8;
 bool gameOver = false;
 
 std::vector<btRigidBody*> targetBodies;
-
-
-// --- Funções Globais (Muitas foram movidas para a classe) ---
-
+PassaroRed* red;
 btRigidBody* createTargetBox(float mass, const btVector3& position) {
     btTransform startTransform;
     startTransform.setIdentity();
@@ -431,7 +171,6 @@ void initBullet() {
     groundRigidBody->setRestitution(0.3f);
     
     dynamicsWorld->addRigidBody(groundRigidBody);
-    
     projectileShape = new btSphereShape(0.3f);
     collisionShapes.push_back(projectileShape);
     
@@ -476,12 +215,101 @@ void initBullet() {
     trees.push_back(Tree(10.0f, 0.0f, -18.0f, 21.1f));
 }
 
-// MODIFICADO: As funções 'clearProjectile', 'createProjectileInPouch',
-// 'drawCylinder', 'drawWoodenBase', 'drawElastic', 'drawAimLine',
-// 'updateElasticPhysics', 'updatePouchPosition' e 'screenToWorld'
-// foram MOVIDAS para dentro da classe SlingshotManager.
+void clearProjectile() {
+    if (red && red->getRigidBody()) {
+        red->limparFisica();
+        // projectileBody = nullptr; // Não é mais necessário
+    }
+}
 
-// ... (Funções drawSky, drawGround permanecem as mesmas) ...
+void createProjectileInPouch() {
+    clearProjectile();
+    
+    float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
+    float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
+    float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
+    
+    slingshot.pouchX = restX;
+    slingshot.pouchY = restY;
+    slingshot.pouchZ = restZ;
+    
+    // SIMPLIFICADO: inicializarFisica já cria tudo!
+    red->inicializarFisica(dynamicsWorld, restX, restY, restZ);
+    
+    // Configura propriedades físicas adicionais
+    if (red->getRigidBody()) {
+        red->getRigidBody()->setCollisionFlags(
+            red->getRigidBody()->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT
+        );
+        red->getRigidBody()->setActivationState(DISABLE_DEACTIVATION);
+    }
+}
+
+void drawCylinder(float x1, float y1, float z1, float x2, float y2, float z2, float radius) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    float dz = z2 - z1;
+    float length = sqrt(dx*dx + dy*dy + dz*dz);
+    
+    if (length == 0.0) return;
+    
+    float z_axis[3] = {0.0, 0.0, 1.0};
+    float vector[3] = {dx, dy, dz};
+    vector[0] /= length;
+    vector[1] /= length;
+    vector[2] /= length;
+    
+    float axis[3];
+    axis[0] = z_axis[1] * vector[2] - z_axis[2] * vector[1];
+    axis[1] = z_axis[2] * vector[0] - z_axis[0] * vector[2];
+    axis[2] = z_axis[0] * vector[1] - z_axis[1] * vector[0];
+    
+    float dot_product = z_axis[0]*vector[0] + z_axis[1]*vector[1] + z_axis[2]*vector[2];
+    float angle = acos(dot_product) * 180.0 / M_PI;
+    
+    if (dot_product < -0.99999) {
+        axis[0] = 1.0;
+        axis[1] = 0.0;
+        axis[2] = 0.0;
+        angle = 180.0;
+    }
+    
+    glPushMatrix();
+    glTranslatef(x1, y1, z1);
+    glRotatef(angle, axis[0], axis[1], axis[2]);
+    GLUquadric* quad = gluNewQuadric();
+    gluCylinder(quad, radius, radius, length, 16, 16);
+    gluDeleteQuadric(quad);
+    glPopMatrix();
+}
+
+void drawWoodenBase() {
+    glColor3f(0.5f, 0.35f, 0.05f);
+    
+    drawCylinder(slingshot.baseX, slingshot.baseY, slingshot.baseZ,
+                 slingshot.leftArmX, slingshot.leftArmY, slingshot.leftArmZ,
+                 0.3);
+    
+    drawCylinder(slingshot.leftArmX, slingshot.leftArmY, slingshot.leftArmZ,
+                 slingshot.leftTopX, slingshot.leftTopY, slingshot.leftTopZ,
+                 0.2);
+    
+    drawCylinder(slingshot.rightArmX, slingshot.rightArmY, slingshot.rightArmZ,
+                 slingshot.rightTopX, slingshot.rightTopY, slingshot.rightTopZ,
+                 0.2);
+}
+
+void drawElastic() {
+    glColor3f(0.05f, 0.05f, 0.05f);
+    glLineWidth(12.0f);
+    glBegin(GL_LINES);
+    glVertex3f(slingshot.leftTopX, slingshot.leftTopY, slingshot.leftTopZ);
+    glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
+    glVertex3f(slingshot.rightTopX, slingshot.rightTopY, slingshot.rightTopZ);
+    glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
+    glEnd();
+}
+
 void drawSky() {
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
@@ -598,7 +426,80 @@ void drawGround() {
     glEnable(GL_LIGHTING);
 }
 
-// MODIFICADO: 'isTargetInAimLine' foi movida para a classe SlingshotManager
+bool isTargetInAimLine(btRigidBody* target) {
+    if (!slingshot.isPulling || !red || !red->getRigidBody()) return false;
+    
+    float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
+    float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
+    float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
+    
+    float dirX = restX - slingshot.pouchX;
+    float dirY = restY - slingshot.pouchY;
+    float dirZ = restZ - slingshot.pouchZ;
+    
+    float length = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+    if (length < 0.01f) return false;
+    
+    dirX /= length;
+    dirY /= length;
+    dirZ /= length;
+    
+    btTransform trans;
+    target->getMotionState()->getWorldTransform(trans);
+    btVector3 targetPos = trans.getOrigin();
+    
+    float toTargetX = targetPos.x() - slingshot.pouchX;
+    float toTargetY = targetPos.y() - slingshot.pouchY;
+    float toTargetZ = targetPos.z() - slingshot.pouchZ;
+    
+    float targetDist = sqrt(toTargetX*toTargetX + toTargetY*toTargetY + toTargetZ*toTargetZ);
+    if (targetDist < 0.01f) return false;
+    
+    toTargetX /= targetDist;
+    toTargetY /= targetDist;
+    toTargetZ /= targetDist;
+    
+    float dot = dirX * toTargetX + dirY * toTargetY + dirZ * toTargetZ;
+    
+    return dot > 0.95f;
+}
+
+void drawAimLine() {
+    if (slingshot.isPulling && red && red->getRigidBody()) {
+        glDisable(GL_LIGHTING);
+        
+        float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
+        float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
+        float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
+        
+        float dirX = restX - slingshot.pouchX;
+        float dirY = restY - slingshot.pouchY;
+        float dirZ = restZ - slingshot.pouchZ;
+        
+        float length = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
+        if (length > 0.01f) {
+            dirX /= length;
+            dirY /= length;
+            dirZ /= length;
+            
+            glColor4f(1.0f, 1.0f, 0.0f, 0.8f);
+            glLineWidth(3.0f);
+            glEnable(GL_LINE_STIPPLE);
+            glLineStipple(3, 0xAAAA);
+            
+            glBegin(GL_LINES);
+            glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
+            glVertex3f(slingshot.pouchX + dirX * 15.0f, 
+                      slingshot.pouchY + dirY * 15.0f, 
+                      slingshot.pouchZ + dirZ * 15.0f);
+            glEnd();
+            
+            glDisable(GL_LINE_STIPPLE);
+        }
+        
+        glEnable(GL_LIGHTING);
+    }
+}
 
 void drawHUD() {
     glDisable(GL_LIGHTING);
@@ -695,8 +596,106 @@ void drawHUD() {
     glEnable(GL_LIGHTING);
 }
 
+void updateElasticPhysics() {
+    if (!slingshot.isPulling && red && red->getRigidBody()) {
+        float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
+        float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
+        float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
+        
+        float dx = slingshot.pouchX - restX;
+        float dy = slingshot.pouchY - restY;
+        float dz = slingshot.pouchZ - restZ;
+        
+        float k = 25.0f;
+        static float vx = 0.0f, vy = 0.0f, vz = 0.0f;
+        float damping = 0.88f;
+        
+        float fx = -k * dx;
+        float fy = -k * dy;
+        float fz = -k * dz;
+        
+        float mass = 0.08f;
+        float ax = fx / mass;
+        float ay = fy / mass;
+        float az = fz / mass;
+        
+        float dt = 0.016f;
+        vx += ax * dt;
+        vy += ay * dt;
+        vz += az * dt;
+        
+        vx *= damping;
+        vy *= damping;
+        vz *= damping;
+        
+        slingshot.pouchX += vx * dt;
+        slingshot.pouchY += vy * dt;
+        slingshot.pouchZ += vz * dt;
+        
+        float distance = sqrt(dx*dx + dy*dy + dz*dz);
+        if (distance < 0.05f && sqrt(vx*vx + vy*vy + vz*vz) < 0.3f) {
+            slingshot.pouchX = restX;
+            slingshot.pouchY = restY;
+            slingshot.pouchZ = restZ;
+            vx = vy = vz = 0.0f;
+        }
+    }
+}
 
-// --- MODIFICADO: Callbacks de Eventos ---
+void updatePouchPosition() {
+    if (mousePressed && slingshot.isPulling) {
+        int deltaX_pixels = mouseX - startMouseX;
+        int deltaY_pixels = mouseY - startMouseY;
+        
+        float sensitivityX = 0.04f;
+        float sensitivityY = 0.04f;
+        
+        float dx = (float)deltaX_pixels * sensitivityX;
+        float dy = (float)-deltaY_pixels * sensitivityY;
+        float dz = pullDepth;
+        
+        float maxPull = 7.0f;
+        float currentDist = sqrt(dx*dx + dy*dy + dz*dz);
+        
+        if (currentDist > maxPull) {
+            dx = (dx / currentDist) * maxPull;
+            dy = (dy / currentDist) * maxPull;
+            dz = (dz / currentDist) * maxPull;
+        }
+        
+        slingshot.pouchX = startPouchX + dx;
+        slingshot.pouchY = startPouchY + dy;
+        slingshot.pouchZ = startPouchZ + dz;
+        
+        if (red->getRigidBody()) {
+            btTransform trans;
+            red->getRigidBody()->getMotionState()->getWorldTransform(trans);
+            trans.setOrigin(btVector3(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ));
+            red->getRigidBody()->getMotionState()->setWorldTransform(trans);
+            red->getRigidBody()->setWorldTransform(trans);
+        }
+    }
+}
+
+void screenToWorld(int screenX, int screenY, float depth, float& worldX, float& worldY, float& worldZ) {
+    GLint viewport[4];
+    GLdouble modelview[16];
+    GLdouble projection[16];
+    GLdouble posX, posY, posZ;
+    
+    glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+    glGetDoublev(GL_PROJECTION_MATRIX, projection);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    
+    GLfloat winX = (float)screenX;
+    GLfloat winY = (float)viewport[3] - (float)screenY;
+    
+    gluUnProject(winX, winY, depth, modelview, projection, viewport, &posX, &posY, &posZ);
+    
+    worldX = posX;
+    worldY = posY;
+    worldZ = posZ;
+}
 
 void mouse(int button, int state, int x, int y) {
     // Delega o evento para o gerenciador
@@ -995,7 +994,10 @@ void init() {
     // ... (Carregamento dos modelos OBJ permanece o mesmo) ...
     printf("Tentando carregar modelo red.obj do projetil...\n");
     const char* projectilePaths[] = {
-        "Objetos/red.obj", "./Objetos/red.obj", "../Objetos/red.obj", "red.obj"
+        "Objetos/redV2.obj",
+        "./Objetos/redV2.obj",
+        "../Objetos/redV2.obj",
+        "redV2.obj"
     };
     projectileModelLoaded = false;
     for (const char* path : projectilePaths) {
@@ -1012,7 +1014,11 @@ void init() {
     
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     const char* possiblePaths[] = {
-        "Objetos/arvore.obj", "./Objetos/arvore.obj", "../Objetos/arvore.obj", "arvore.obj", "tree.obj"
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
+        "tree2.obj"
     };
     treeModelLoaded = false;
     for (const char* path : possiblePaths) {
@@ -1057,6 +1063,9 @@ int main(int argc, char** argv) {
     
     init();
     
+    // CRÍTICO: Criar o objeto red ANTES de usar!
+    red = new PassaroRed(0.0f, 0.0f, 0.0f);
+    
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
@@ -1068,10 +1077,13 @@ int main(int argc, char** argv) {
     
     glutMainLoop();
     
-    // --- Limpeza ---
+    // Limpeza
+    if (red) {
+        delete red;  // O destrutor de Passaro já limpa a física
+        red = nullptr;
+    }
     
-    // MODIFICADO: Não precisamos mais do 'clearProjectile()' global
-    
+    // Limpa os target bodies
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
