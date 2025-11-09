@@ -942,7 +942,7 @@ void display() {
                 
                 if (projectileModelLoaded) {
                     // Usar modelo red.obj
-                    glColor3f(0.8f, 0.2f, 0.2f);
+                    // glColor3f(0.8f, 0.2f, 0.2f);
                     glPushMatrix();
  
                     glRotatef(180, 0, 1, 0); // 180 graus em torno do eixo Y
@@ -960,7 +960,7 @@ void display() {
                 
                 if (projectileModelLoaded) {
                     // Usar modelo red.obj
-                    glColor3f(0.8f, 0.2f, 0.2f);
+                    // glColor3f(0.8f, 0.2f, 0.2f);
                     
                     projectileModel.draw();
                 } else {
@@ -1095,10 +1095,10 @@ void init() {
     printf("Tentando carregar modelo red.obj do projetil...\n");
     
     const char* projectilePaths[] = {
-        "Objetos/red.obj",
-        "./Objetos/red.obj",
-        "../Objetos/red.obj",
-        "red.obj"
+        "Objetos/redV2.obj",
+        "./Objetos/redV2.obj",
+        "../Objetos/redV2.obj",
+        "redV2.obj"
     };
     
     projectileModelLoaded = false;
@@ -1119,11 +1119,11 @@ void init() {
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     
     const char* possiblePaths[] = {
-        "Objetos/arvore.obj",
-        "./Objetos/arvore.obj",
-        "../Objetos/arvore.obj",
-        "arvore.obj",
-        "tree.obj"
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
+        "tree2.obj"
     };
     
     treeModelLoaded = false;
