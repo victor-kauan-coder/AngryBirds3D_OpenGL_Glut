@@ -8,7 +8,8 @@
 #include <GL/glu.h>  // Necessário para funções GLU (gluProject, gluCylinder, etc.)
 #include <cmath>     // Necessário para funções matemáticas (sin, cos, sqrt, fabs)
 #include <cstdio>  // Necessário para a função de console 'printf'
-
+//objeto a ser lançado pelo esitlingue
+#include "passaros/passaro.h"
 // (Constante M_PI, se não estiver definida)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -17,32 +18,26 @@
 // 3. Implementação do Construtor
 // A sintaxe "SlingshotManager::" significa que esta função "SlingshotManager"
 // pertence à classe "SlingshotManager". Este é o construtor.
-SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, btCollisionShape* shape, int* shots, bool* game_over)
-    // --- Lista de Inicialização de Membros ---
-    // Esta é a forma correta e eficiente em C++ de atribuir os valores
-    // recebidos pelo construtor às variáveis de membro da classe.
-    : worldRef(world),               // Atribui o ponteiro 'world' à nossa variável interna 'worldRef'
-      projectileShapeRef(shape),     // Atribui o 'shape' ao 'projectileShapeRef'
-      shotsRemainingRef(shots),      // Atribui o ponteiro 'shots' ao 'shotsRemainingRef'
-      isGameOverRef(game_over),    // Atribui o ponteiro 'game_over' ao 'isGameOverRef'
+SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* projectile, int* shots, bool* game_over)
+    // --- Lista de Inicialização de Membros (Modificada) ---
+    : worldRef(world),               
+      projectileRef(projectile),     // <-- Modificado
+      shotsRemainingRef(shots),      
+      isGameOverRef(game_over),    
       
       // --- Inicialização dos Estados Internos ---
-      // Define todos os valores padrão para o estado inicial do estilingue.
-      projectileInPouch(nullptr),  // Começa sem nenhum projétil na malha
-      isBeingPulled(false),      // Não está sendo puxado
-      isPouchGrabbed(false),     // A malha não está agarrada
-      currentMouseX(0),          // Posição inicial do mouse
+      projectileInPouch(nullptr),  
+      isBeingPulled(false),      
+      isPouchGrabbed(false),     
+      currentMouseX(0),          
       currentMouseY(0),
-      grabMouseStartX(0),        // Posição inicial do clique (será definida ao clicar)
+      grabMouseStartX(0),        
       grabMouseStartY(0),
-      grabPouchStartX(0),        // Posição inicial da malha (será definida ao clicar)
+      grabPouchStartX(0),        
       grabPouchStartY(0),
       grabPouchStartZ(0),
-      pouchPullDepthZ(0.0f)      // Profundidade inicial (controlada por Q/E)
+      pouchPullDepthZ(0.0f)      
 {
-    // O corpo do construtor.
-    // Agora que todas as variáveis estão inicializadas,
-    // chamamos nossa função interna para calcular a geometria do estilingue.
     initGeometry();
 }
 
@@ -345,27 +340,25 @@ bool SlingshotManager::isTargetInAimLine(btRigidBody* target) {
  * @brief Remove e deleta com segurança o projétil da malha.
  */
 void SlingshotManager::clearProjectile() {
-    // Só faz algo se houver um projétil
-    if (projectileInPouch) {
-        // Remove o corpo do mundo de física Bullet
-        worldRef->removeRigidBody(projectileInPouch);
-        
-        // Deleta os componentes do corpo da memória
-        delete projectileInPouch->getMotionState();
-        delete projectileInPouch;
-        
-        // Define o ponteiro como nulo para evitar "ponteiros selvagens"
-        projectileInPouch = nullptr;
+    // Pede ao pássaro para limpar sua própria física
+    if (projectileRef && projectileRef->getRigidBody()) {
+        projectileRef->limparFisica();
     }
+    // Limpa nosso ponteiro de rastreamento
+    projectileInPouch = nullptr;
 }
 
+
 /**
- * @brief Cria um novo projétil e o coloca na malha como um objeto "cinemático".
+ * @brief Cria um novo projétil e o coloca na malha como um objeto "cinemático". (MODIFICADO)
  */
 void SlingshotManager::createProjectileInPouch() {
     // Garante que a malha esteja vazia antes de criar um novo
     clearProjectile();
     
+    // Checagem de segurança
+    if (!projectileRef || !worldRef) return; 
+
     // Posição de repouso (onde o projétil é criado)
     float restX = (leftForkTipX + rightForkTipX) / 2.0f;
     float restY = (leftForkTipY + rightForkTipY) / 2.0f;
@@ -376,63 +369,53 @@ void SlingshotManager::createProjectileInPouch() {
     pouchPositionY = restY;
     pouchPositionZ = restZ;
     
-    // --- Criação Padrão do Bullet ---
-    btDefaultMotionState* motionState = new btDefaultMotionState(
-        btTransform(btQuaternion(0, 0, 0, 1), btVector3(restX, restY, restZ)));
+    // --- [ MUDANÇA CRÍTICA ] ---
     
-    btVector3 localInertia(0, 0, 0);
-    float mass = 1.0f;
-    projectileShapeRef->calculateLocalInertia(mass, localInertia);
+    // 1. Reseta o pássaro para a posição inicial
+    projectileRef->resetar(restX, restY, restZ); 
+    // 2. Pede ao pássaro para criar seu corpo físico no mundo
+    projectileRef->inicializarFisica(worldRef, restX, restY, restZ);
     
-    btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, motionState, projectileShapeRef, localInertia);
+    // 3. Armazena o ponteiro para o corpo rígido que o pássaro acabou de criar
+    projectileInPouch = projectileRef->getRigidBody();
+
+    if (!projectileInPouch) {
+        printf("ERRO (SlingshotManager): Falha ao inicializar a fisica do passaro!\n");
+        return;
+    }
     
-    // Armazena o novo corpo rígido na nossa variável
-    projectileInPouch = new btRigidBody(rbInfo);
-    
-    // Define propriedades físicas
-    projectileInPouch->setRestitution(0.6f);
-    projectileInPouch->setFriction(0.5f);
-    projectileInPouch->setRollingFriction(0.1f);
-    
-    // --- [ A PARTE MAIS IMPORTANTE ] ---
-    // Define o flag "CINEMÁTICO" (CF_KINEMATIC_OBJECT).
-    // Isso diz ao Bullet: "Não aplique física (gravidade, etc.) neste objeto.
-    // Eu (nosso código) vou controlar sua posição manualmente a cada quadro."
+    // 4. Define o corpo como CINEMÁTICO (controlado por nós, não pelo Bullet)
     projectileInPouch->setCollisionFlags(projectileInPouch->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
     projectileInPouch->setActivationState(DISABLE_DEACTIVATION); // Impede de "dormir"
     
-    // Adiciona o projétil (agora cinemático) ao mundo
-    worldRef->addRigidBody(projectileInPouch);
+    // (Não adicionamos ao worldRef, pois 'inicializarFisica' já deve fazer isso)
 }
-
 /**
- * @brief Lança o projétil, devolvendo seu controle para a física Bullet.
+ * @brief Lança o projétil, devolvendo seu controle para a física Bullet. (MODIFICADO)
  */
 void SlingshotManager::launchProjectile() {
-    // Segurança: não faz nada se não houver projétil
-    if (!projectileInPouch) return;
+    // Segurança: não faz nada se não houver projétil ou pássaro
+    if (!projectileInPouch || !projectileRef) return;
 
-    printf("Lancando projetil!\n");
+    printf("Lancando projetil (Passaro)!\n");
     
     // Posição de repouso
     float restX = (leftForkTipX + rightForkTipX) / 2.0f;
     float restY = (leftForkTipY + rightForkTipY) / 2.0f;
     float restZ = (leftForkTipZ + rightForkTipZ) / 2.0f;
     
-    // Calcula o vetor de impulso (da malha puxada para a malha em repouso)
+    // Calcula o vetor de impulso
     float impulseX = restX - pouchPositionX;
     float impulseY = restY - pouchPositionY;
     float impulseZ = restZ - pouchPositionZ;
     
-    // --- [ A PARTE MAIS IMPORTANTE ] ---
-    // Remove o flag "CINEMÁTICO" usando o operador E (bitwise AND)
-    // e o operador NÃO (bitwise NOT, ~).
-    // Isso diz ao Bullet: "Ok, eu não controlo mais este objeto.
-    // Ele agora é um objeto DINÂMICO. Assuma o controle (gravidade, colisões, etc.)."
+    // --- [ MUDANÇA CRÍTICA ] ---
+    
+    // 1. Remove o flag "CINEMÁTICO", devolvendo o controle ao Bullet
     projectileInPouch->setCollisionFlags(projectileInPouch->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
     projectileInPouch->forceActivationState(ACTIVE_TAG); // "Acorda" o objeto
     
-    // Redefine propriedades físicas (agora que é dinâmico)
+    // 2. Define propriedades de física para o voo
     projectileInPouch->setRestitution(0.6f);
     projectileInPouch->setFriction(0.5f);
     projectileInPouch->setRollingFriction(0.1f);
@@ -442,16 +425,17 @@ void SlingshotManager::launchProjectile() {
     projectileInPouch->setLinearVelocity(btVector3(0,0,0));
     projectileInPouch->setAngularVelocity(btVector3(0,0,0));
     
-    // Define a força do lançamento
-    float forceMagnitude = 20.0f;
+    // 3. Define a força do lançamento
+    float forceMagnitude = 20.0f; // Ajuste este valor
     btVector3 impulse(impulseX * forceMagnitude, impulseY * forceMagnitude, impulseZ * forceMagnitude);
     
-    // Aplica o "peteleco" (impulso) no centro do objeto
+    // 4. Aplica o "peteleco" (impulso)
     projectileInPouch->applyCentralImpulse(impulse);
+
+    // 5. Avisa a classe Passaro que ela está em voo (baseado no README)
+    projectileRef->setEmVoo(true);
     
     // O projétil foi lançado. Ele não está mais "na nossa malha".
-    // Limpamos o ponteiro. O objeto *continua existindo* no mundo Bullet,
-    // mas não é mais o projétil que estamos controlando.
     projectileInPouch = nullptr; 
     
     // Usa o ponteiro para a variável global para decrementar os tiros
@@ -462,7 +446,6 @@ void SlingshotManager::launchProjectile() {
         *isGameOverRef = true; // Define o estado global de fim de jogo
     }
 }
-
 /**
  * @brief Função auxiliar para desenhar um cilindro 3D entre dois pontos.
  */

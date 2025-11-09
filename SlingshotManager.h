@@ -1,11 +1,12 @@
-// Arquivo: SlingshotManager.h (Corrigido)
-
 #ifndef SLINGSHOTMANAGER_H
 #define SLINGSHOTMANAGER_H
 
-// 2. Includes necessários para a DECLARAÇÃO
-// CORRIGIDO: Adicionado o prefixo "bullet/"
+// 1. Includes necessários para a DECLARAÇÃO
 #include <btBulletDynamicsCommon.h> 
+
+// 2. ADICIONADO: Forward declaration para a classe Passaro
+// Isso evita a necessidade de incluir "passaro.h" no header.
+class Passaro;
 
 /**
  * @class SlingshotManager
@@ -31,13 +32,16 @@ private:
 
     // --- Referências Externas (Ponteiros) ---
     btDiscreteDynamicsWorld* worldRef;
-    btCollisionShape* projectileShapeRef;
+    
+    // 3. MODIFICADO: Referência ao pássaro
+    // btCollisionShape* projectileShapeRef; // <-- Antigo
+    Passaro* projectileRef;                 // <-- Novo: Ponteiro para o pássaro
+    
     btRigidBody* projectileInPouch; 
     int* shotsRemainingRef;
     bool* isGameOverRef;
 
     // --- Funções Internas (Privadas) ---
-    // CORRIGIDO: Removidos os corpos das funções, deixando apenas a declaração
     void clearProjectile();
     void createProjectileInPouch();
     void launchProjectile();
@@ -53,15 +57,15 @@ public:
     /**
      * @brief Construtor do SlingshotManager.
      */
-    // CORRIGIDO: Removido o corpo da função
-    SlingshotManager(btDiscreteDynamicsWorld* world, btCollisionShape* shape, int* shots, bool* game_over);
+    // 4. MODIFICADO: Construtor
+    // SlingshotManager(btDiscreteDynamicsWorld* world, btCollisionShape* shape, int* shots, bool* game_over); // <-- Antigo
+    SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* projectile, int* shots, bool* game_over);       // <-- Novo
     
     // --- Funções Públicas de Interface ---
 
     /**
      * @brief Calcula e define a geometria 3D do estilingue.
      */
-    // CORRIGIDO: Removidos os corpos das funções
     void initGeometry();
 
     /**
