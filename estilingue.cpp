@@ -38,9 +38,6 @@ btSequentialImpulseConstraintSolver* solver = nullptr;
 OBJModel treeModel;
 bool treeModelLoaded = false;
 
-OBJModel projectileModel;  // NOVO: Modelo do projÃ©til (red.obj)
-bool projectileModelLoaded = false;
-
 class Tree {
 public:
     float x, y, z;
@@ -220,7 +217,6 @@ void initBullet() {
 void clearProjectile() {
     if (red && red->getRigidBody()) {
         red->limparFisica();
-        // projectileBody = nullptr; // Não é mais necessário
     }
 }
 
@@ -921,11 +917,26 @@ void display() {
     drawAimLine();
     glEnable(GL_LIGHTING);
     
+    // Desenhar o pássaro Red separadamente (ele gerencia sua própria transformação)
+    if (red && red->getRigidBody()) {
+        glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+        red->desenhar();
+        red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
+        // A rotação visual de 180° em Y já está configurada por padrão no construtor
+        // Se quiser mudar: red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
+    }
+    
+    // Desenhar outros objetos físicos (caixas, alvos)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
         
         if (body && body->getMotionState() && body->getInvMass() != 0) {
+            // Pular o Red pois já foi desenhado acima
+            if (red && body == red->getRigidBody()) {
+                continue;
+            }
+            
             btTransform trans;
             body->getMotionState()->getWorldTransform(trans);
             btScalar m[16];
@@ -936,40 +947,7 @@ void display() {
             
             btCollisionShape* shape = body->getCollisionShape();
             
-            // MODIFICADO: Desenhar modelo OBJ red.obj ao invÃ©s da esfera
-            if (red && body == red->getRigidBody()) {
-                glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
-                
-                if (projectileModelLoaded) {
-                    // Usar modelo red.obj
-                    glColor3f(0.8f, 0.2f, 0.2f);
-                    glPushMatrix();
- 
-                    glRotatef(180, 0, 1, 0); // 180 graus em torno do eixo Y
-
-                    projectileModel.draw();
-                    glPopMatrix();
-                } else {
-                    // Fallback: esfera vermelha
-                    glColor3f(0.8f, 0.2f, 0.2f);
-                    glutSolidSphere(0.3, 20, 20);
-                }
-            }
-            else if (shape == projectileShape) {
-                glMaterialf(GL_FRONT, GL_SHININESS, 50.0f);
-                
-                if (projectileModelLoaded) {
-                    // Usar modelo red.obj
-                    glColor3f(0.8f, 0.2f, 0.2f);
-                    
-                    projectileModel.draw();
-                } else {
-                    // Fallback: esfera vermelha
-                    glColor3f(0.8f, 0.2f, 0.2f);
-                    glutSolidSphere(0.3, 16, 16);
-                }
-            }
-            else if (shape == boxShape) {
+            if (shape == boxShape) {
                 glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
                 
                 if (isTargetInAimLine(body)) {
@@ -1089,32 +1067,7 @@ void init() {
     slingshot.pouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
     slingshot.isPulling = false;
     
-    initBullet();
-    
-    // NOVO: Carregar modelo red.obj para o projÃ©til
-    printf("Tentando carregar modelo red.obj do projetil...\n");
-    
-    const char* projectilePaths[] = {
-        "Objetos/red.obj",
-        "./Objetos/red.obj",
-        "../Objetos/red.obj",
-        "red.obj"
-    };
-    
-    projectileModelLoaded = false;
-    for (const char* path : projectilePaths) {
-        printf("  Tentando: %s\n", path);
-        if (projectileModel.loadFromFile(path)) {
-            projectileModelLoaded = true;
-            printf("  âœ“ Modelo red.obj carregado com sucesso de: %s\n", path);
-            break;
-        }
-    }
-    
-    if (!projectileModelLoaded) {
-        printf("  Modelo red.obj nao encontrado. Usando esfera vermelha padrao.\n");
-    }
-    
+    initBullet();    
     // Carregar modelo da Ã¡rvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     

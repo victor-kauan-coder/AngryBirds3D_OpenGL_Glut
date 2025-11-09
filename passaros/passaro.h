@@ -59,6 +59,10 @@ protected:
     // Amortecimento (damping)
     float amortecimentoLinear;
     float amortecimentoAngular;
+    
+    // Rotação visual adicional (não afeta física)
+    float rotacaoVisualX, rotacaoVisualY, rotacaoVisualZ;
+    float anguloVisual;
 
 public:
     /**
@@ -78,6 +82,8 @@ public:
           corR(1.0f), corG(0.0f), corB(0.0f),
           massa(1.0f),
           tipo("Passaro Base"),
+          rotacaoVisualX(0.0f), rotacaoVisualY(1.0f), rotacaoVisualZ(0.0f),
+          anguloVisual(M_PI),  // 180 graus por padrão
           restituicao(0.6f),
           friccao(0.5f),
           amortecimentoLinear(0.1f),
@@ -189,6 +195,11 @@ public:
         
         // Aplica a matriz de transformação do Bullet
         glMultMatrixf(matriz);
+        
+        // Aplica rotação visual adicional (não afeta física!)
+        float anguloDeg = anguloVisual * 180.0f / M_PI;
+        glRotatef(anguloDeg, rotacaoVisualX, rotacaoVisualY, rotacaoVisualZ);
+        
         glScalef(escala, escala, escala);
         
         // Aplica cor
@@ -203,6 +214,8 @@ public:
         }
         
         glPopMatrix();
+
+        // carregarModelo()
         
         // Desenha esfera de colisão (debug)
         #ifdef DEBUG_COLISAO
@@ -441,6 +454,26 @@ public:
         btTransform transform;
         rigidBody->getMotionState()->getWorldTransform(transform);
         return transform.getRotation();
+    }
+
+    // ATENÇÃO: Este método afeta a FÍSICA! Use apenas quando o pássaro está parado
+    void setRotacao(float eixoX, float eixoY, float eixoZ, float anguloRad) {
+        if (!rigidBody) return;
+        btTransform transform;
+        rigidBody->getMotionState()->getWorldTransform(transform);
+        btQuaternion quat;
+        quat.setRotation(btVector3(eixoX, eixoY, eixoZ), anguloRad);
+        transform.setRotation(quat);
+        rigidBody->setWorldTransform(transform);
+        rigidBody->getMotionState()->setWorldTransform(transform);
+    }
+    
+    // Rotação VISUAL apenas (não afeta física - seguro durante o voo!)
+    void setRotacaoVisual(float eixoX, float eixoY, float eixoZ, float anguloRad) {
+        rotacaoVisualX = eixoX;
+        rotacaoVisualY = eixoY;
+        rotacaoVisualZ = eixoZ;
+        anguloVisual = anguloRad;
     }
     
     float getEscala() const { return escala; }
