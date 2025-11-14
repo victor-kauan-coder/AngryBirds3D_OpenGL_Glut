@@ -110,6 +110,7 @@ public:
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ) {
         mundoFisica = mundo;
         
+ 
         // Cria a forma de colisão (esfera)
         colisaoShape = new btSphereShape(raioColisao * escala);
         
@@ -138,7 +139,10 @@ public:
         
         // Cria o rigid body
         rigidBody = new btRigidBody(rbInfo);
-        
+        rigidBody->setCcdMotionThreshold(0.0001f);
+        rigidBody->setCcdSweptSphereRadius(raioColisao * escala);
+        rigidBody->setContactProcessingThreshold(0.0f);
+
         // Adiciona ao mundo de física
         mundoFisica->addRigidBody(rigidBody);
         

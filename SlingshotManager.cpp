@@ -49,17 +49,20 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
  */
 void SlingshotManager::initGeometry() {
     // Define a posição da base (cabo) e o início dos braços da forquilha
+    float slingshotPosZ = 12.0f; // <-- Defina a profundidade aqui
+
+    // Define a posição da base (cabo) e o início dos braços da forquilha
     handleBaseX = 0.0f;
     handleBaseY = 0.0f;
-    handleBaseZ = 0.0f;
+    handleBaseZ = slingshotPosZ; // <-- MUDADO
     
     leftArmBaseX = 0.0f;
     leftArmBaseY = 3.0f;
-    leftArmBaseZ = 0.0f;
+    leftArmBaseZ = slingshotPosZ; // <-- MUDADO
     
     rightArmBaseX = 0.0f;
     rightArmBaseY = 3.0f;
-    rightArmBaseZ = 0.0f;
+    rightArmBaseZ = slingshotPosZ; // <-- MUDADO
     
     // Define os parâmetros da forquilha (forma de "Y")
     float armHeight = 2.5f; // Comprimento de cada braço da forquilha
@@ -112,6 +115,26 @@ void SlingshotManager::update() {
     updateElasticReturnPhysics();
 }
 
+void SlingshotManager::handleMouseScroll(int button) {
+    // Só funciona se estivermos puxando
+    if (isBeingPulled) {
+        // Scroll UP (Geralmente 3): Puxa 'para trás' (aumenta Z)
+        if (button == 4) { 
+            pouchPullDepthZ += 0.3f;
+            if (pouchPullDepthZ > 6.0f) pouchPullDepthZ = 6.0f;
+            printf("Scroll UP. Profundidade: %.2f\n", pouchPullDepthZ);
+            
+        // Scroll DOWN (Geralmente 4): Puxa 'para frente' (diminui Z)
+        } else if (button == 3) { 
+            pouchPullDepthZ -= 0.3f;
+            if (pouchPullDepthZ < 0.0f) pouchPullDepthZ = 0.0f;
+            printf("Scroll DOWN. Profundidade: %.2f\n", pouchPullDepthZ);
+        }
+        
+        // Recalcula a posição 3D
+        updatePouchPosition(); 
+    }
+}
 /**
  * @brief Gerencia eventos de clique (pressionar/soltar) do mouse.
  * Chamado pela 'mouse()' global.
@@ -119,7 +142,10 @@ void SlingshotManager::update() {
 void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
     // Se o jogo acabou, ignora qualquer clique
     if (*isGameOverRef) return;
-
+    if (state == GLUT_UP && (button == 3 || button == 4)) { 
+        handleMouseScroll(button);
+        return; // Termina a função após tratar o scroll
+    }
     // Só nos importamos com o botão esquerdo do mouse
     if (button == GLUT_LEFT_BUTTON) {
         
@@ -230,25 +256,25 @@ void SlingshotManager::handlePassiveMouseMotion(int x, int y) {
  */
 void SlingshotManager::handleKeyboard(unsigned char key) {
     switch(key) {
-        case 'q':
-        case 'Q':
-            // Só funciona se estivermos puxando
-            if (isBeingPulled) {
-                pouchPullDepthZ += 0.3f; // Aumenta a profundidade (puxa "para frente")
-                if (pouchPullDepthZ > 6.0f) pouchPullDepthZ = 6.0f; // Limite
-                updatePouchPosition(); // Atualiza a posição 3D
-            }
-            break;
+    //     case 'q':
+    //     case 'Q':
+    //         // Só funciona se estivermos puxando
+    //         if (isBeingPulled) {
+    //             pouchPullDepthZ += 0.3f; // Aumenta a profundidade (puxa "para frente")
+    //             if (pouchPullDepthZ > 6.0f) pouchPullDepthZ = 6.0f; // Limite
+    //             updatePouchPosition(); // Atualiza a posição 3D
+    //         }
+    //         break;
             
-        case 'e':
-        case 'E':
-            if (isBeingPulled) {
-                pouchPullDepthZ -= 0.3f; // Diminui a profundidade (puxa "para trás")
-                if (pouchPullDepthZ < 0.0f) pouchPullDepthZ = 0.0f; // Limite
-                updatePouchPosition(); // Atualiza a posição 3D
-            }
-            break;
-    }
+    //     case 'e':
+    //     case 'E':
+    //         if (isBeingPulled) {
+    //             pouchPullDepthZ -= 0.3f; // Diminui a profundidade (puxa "para trás")
+    //             if (pouchPullDepthZ < 0.0f) pouchPullDepthZ = 0.0f; // Limite
+    //             updatePouchPosition(); // Atualiza a posição 3D
+    //         }
+    //         break;
+     }
 }
 
 /**
@@ -535,46 +561,76 @@ void SlingshotManager::drawElasticBands() {
 /**
  * @brief Desenha a linha de mira pontilhada.
  */
+/**
+ * @brief Desenha a linha de mira (MODIFICADO PARA PARÁBOLA)
+ */
 void SlingshotManager::drawAimLine() {
     // Só desenha se estivermos ativamente puxando um projétil
-    if (isBeingPulled && projectileInPouch) {
+    if (isBeingPulled && projectileRef) {
         
+        // --- 1. Obter Posição Inicial (p0) ---
+        // A posição inicial é a malha puxada
+        btVector3 p0(pouchPositionX, pouchPositionY, pouchPositionZ);
+
+        // --- 2. Calcular Velocidade Inicial (v0) ---
         // Posição de repouso (para onde a mira aponta)
         float restX = (leftForkTipX + rightForkTipX) / 2.0f;
         float restY = (leftForkTipY + rightForkTipY) / 2.0f;
         float restZ = (leftForkTipZ + rightForkTipZ) / 2.0f;
-        
-        // Vetor de direção (da malha puxada para a posição de repouso)
-        float dirX = restX - pouchPositionX;
-        float dirY = restY - pouchPositionY;
-        float dirZ = restZ - pouchPositionZ;
-        float length = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
 
-        if (length > 0.01f) { // Só desenha se houver uma direção
-            // Normaliza o vetor de direção
-            dirX /= length;
-            dirY /= length;
-            dirZ /= length;
+        // Vetor de impulso (da malha puxada para a posição de repouso)
+        float impulseX = restX - pouchPositionX;
+        float impulseY = restY - pouchPositionY;
+        float impulseZ = restZ - pouchPositionZ;
+        
+        // Constantes da física (DEVEM ser iguais às de launchProjectile e initBullet)
+        const float forceMagnitude = 20.0f; // Mesmo valor de launchProjectile
+        const float mass = projectileRef->getMassa(); // Massa do pássaro
+        const float gravityY = -9.81f; // Gravidade do seu mundo
+
+        // Calcular a velocidade inicial (v0 = (Impulso * Força) / Massa)
+        btVector3 v0(
+            (impulseX * forceMagnitude) / mass,
+            (impulseY * forceMagnitude) / mass,
+            (impulseZ * forceMagnitude) / mass
+        );
+
+        // --- 3. Desenhar a Parábola ---
+        glColor4f(1.0f, 1.0f, 1.0f, 0.8f); // Amarelo translúcido
+        glLineWidth(3.0f);
+        
+        // Ativa o "pontilhado" da linha
+        glEnable(GL_LINE_STIPPLE);
+        glLineStipple(3, 0xAAAA); // Mesmo pontilhado de antes
+        
+        glBegin(GL_LINES); // Usa GL_LINES para desenhar segmentos pontilhados
+
+        int numSegments = 20; // Quantos segmentos de linha desenhar
+        float timeStep = 0.08f; // O "espaço" de tempo de cada segmento (ajuste se necessário)
+        
+        for (int i = 0; i < numSegments; i++) {
+            // Fórmula da trajetória: p(t) = p0 + v0*t + 0.5*a*t^2
             
-            glColor4f(1.0f, 1.0f, 0.0f, 0.8f); // Amarelo translúcido
-            glLineWidth(3.0f);
+            // Ponto inicial do segmento
+            float t1 = (float)i * timeStep;
+            float p1x = p0.x() + v0.x() * t1;
+            float p1y = p0.y() + v0.y() * t1 + 0.5f * gravityY * t1 * t1;
+            float p1z = p0.z() + v0.z() * t1;
             
-            // Ativa o "pontilhado" da linha
-            glEnable(GL_LINE_STIPPLE);
-            glLineStipple(3, 0xAAAA); // Define o padrão (3 pixels ligados, 3 desligados, etc.)
-            
-            glBegin(GL_LINES);
-                // Ponto inicial (na malha)
-                glVertex3f(pouchPositionX, pouchPositionY, pouchPositionZ);
-                // Ponto final (15 unidades à frente na direção da mira)
-                glVertex3f(pouchPositionX + dirX * 15.0f, 
-                           pouchPositionY + dirY * 15.0f, 
-                           pouchPositionZ + dirZ * 15.0f);
-            glEnd();
-            
-            // Desativa o "pontilhado"
-            glDisable(GL_LINE_STIPPLE);
+            // Ponto final do segmento
+            float t2 = (float)(i + 1) * timeStep;
+            float p2x = p0.x() + v0.x() * t2;
+            float p2y = p0.y() + v0.y() * t2 + 0.5f * gravityY * t2 * t2;
+            float p2z = p0.z() + v0.z() * t2;
+
+            glVertex3f(p1x, p1y, p1z);
+            glVertex3f(p2x, p2y, p2z);
         }
+
+        glEnd();
+        
+        // Desativa o "pontilhado"
+        glDisable(GL_LINE_STIPPLE);
     }
 }
 

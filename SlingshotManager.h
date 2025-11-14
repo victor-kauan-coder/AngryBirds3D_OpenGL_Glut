@@ -77,7 +77,10 @@ public:
      * @brief Atualiza a física interna do estilingue.
      */
     void update();
-
+        /**
+     * @brief Gerencia eventos de scroll do mouse.
+     */
+    void handleMouseScroll(int button);
     /**
      * @brief Gerencia eventos de clique do mouse.
      */

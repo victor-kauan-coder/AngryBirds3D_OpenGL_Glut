@@ -9,11 +9,13 @@
 #include <sstream>
 #include <string>
 
-// Corrigido para 'loads.h' (minúsculo, como no arquivo fornecido)
+
 #include "loads.h" 
 #include "passaros/passaro.h"
 #include "passaros/Red.h"
+#include "BlocoDestrutivel.h"
 #include "SlingshotManager.h"
+#include "ParticleManager.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,10 +38,12 @@ btBroadphaseInterface* broadphase = nullptr;
 btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
-
+ParticleManager g_particleManager;
 // Modelos OBJ globais
+OBJModel blockModel;
 OBJModel treeModel;
 bool treeModelLoaded = false;
+bool blockModelLoaded = false;
 
 // --- Classe Tree (sem alterações) ---
 class Tree {
@@ -102,7 +106,7 @@ SlingshotManager* g_slingshotManager = nullptr; // Ponteiro para o gerenciador
 // Variáveis globais de câmera e jogo
 float cameraAngleH = 45.0f;
 float cameraAngleV = 20.0f;
-float cameraDistance = 18.0f;
+float cameraDistance = 28.0f;
 float cameraTargetY = 3.0f;
 
 int score = 0;
@@ -111,13 +115,14 @@ bool gameOver = false;
 
 std::vector<btRigidBody*> targetBodies;
 PassaroRed* red; // Ponteiro para o nosso pássaro
-
+std::vector<BlocoDestrutivel*> blocos;
 // --- Funções do Jogo ---
 
-btRigidBody* createTargetBox(float mass, const btVector3& position) {
+btRigidBody* createTargetBox(float mass, const btVector3& position, const btQuaternion& rotation = btQuaternion(0, 0, 0, 1)) {
     btTransform startTransform;
     startTransform.setIdentity();
     startTransform.setOrigin(position);
+    startTransform.setRotation(rotation); // <-- ÚNICA LINHA ADICIONADA/MODIFICADA
     
     btVector3 localInertia(0, 0, 0);
     if (mass != 0.f)
@@ -127,8 +132,11 @@ btRigidBody* createTargetBox(float mass, const btVector3& position) {
     btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxShape, localInertia);
     btRigidBody* body = new btRigidBody(rbInfo);
     
-    body->setFriction(1.0f);
+    // Configurações de CCD e física
+    body->setCcdMotionThreshold(0.5f);
+    body->setFriction(2.0f);
     body->setRestitution(0.1f);
+    body->setDamping(0.3f, 0.3f);
     
     dynamicsWorld->addRigidBody(body);
     targetBodies.push_back(body);
@@ -165,36 +173,75 @@ void initBullet() {
     projectileShape = new btSphereShape(0.3f); // 'red' usa este raio
     collisionShapes.push_back(projectileShape);
     
-    boxShape = new btBoxShape(btVector3(0.5f, 0.5f, 0.5f));
+    boxShape = new btBoxShape(btVector3(0.2f, 0.2f, 1.2f));
     collisionShapes.push_back(boxShape);
     
     targetBodies.clear();
+//     float boxMass = 2.0f;
+// float Y_BASE = 0.51f; 
+//     float Y_NIVEL2 = 1.52f; // Base (0.5) + Altura (1.0) + Folga
+//     float Y_NIVEL3 = 2.53f; // Nível 2 (1.5) + Altura (1.0) + Folga
+//     float Y_NIVEL4 = 3.54f; // Nível 3 (2.5) + Altura (1.0) + Folga
+
+//     // --- Definindo a Posição e Rotações ---
+//     btVector3 centroTorre(0.0f, 0.0f, -15.0f); // Posição central da construção
+//     float offset = 2.5f; // Distância do centro para os blocos
     
-    // (Criação de caixas e árvores)
-    float boxMass = 1.0f;
-    createTargetBox(boxMass, btVector3(-2.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(-1.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(0.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(1.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(-0.5f, 1.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(0.5f, 1.5f, -8.0f));
+//     // Rotação Padrão (longo no eixo Z, como no seu btBoxShape)
+//     btQuaternion rotZ(0, 0, 0, 1);
+//     // Rotação 90 graus (gira em torno do Y para ficar longo no eixo X)
+//     btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0); 
+
+//     // --- Construindo a Torre ---
+//     // Nível 1 (Base, longo em Z)
+//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_BASE, 0), rotZ);
+//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_BASE, 0), rotZ);
+
+//     // Nível 2 (Meio, longo em X)
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2, -offset), rotX);
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2,  offset), rotX);
+
+//     // Nível 3 (Meio, longo em Z)
+//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_NIVEL3, 0), rotZ);
+//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_NIVEL3, 0), rotZ);
+
+//     // Nível 4 (Topo, longo em X)
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4, -offset), rotX);
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4,  offset), rotX);
+    float boxMass = 8.0f; // (Este valor agora é definido dentro da classe)
+
+    // Definições da construção
+    float H = 1.0f;  float G = 0.02f;
+    float Y_NIVEL1 = 0.5f + G*1; float Y_NIVEL2 = Y_NIVEL1 + H + G;
+    btVector3 centro(0.0f, 0.0f, -20.0f);
+    float L = 3.0f + G; float W = 0.5f + G;
+    btQuaternion rotZ(0, 0, 0, 1);
+    btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0);
     
-    createTargetBox(boxMass, btVector3(-3.0f, 0.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(-3.0f, 1.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(-3.0f, 2.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(2.0f, 0.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(2.0f, 1.5f, -12.0f));
+    // (Caminhos para os seus modelos .obj)
+    const char* modeloBarra = "Objetos/bloco_barra.obj";
+    const char* modeloPlaca = "Objetos/bloco_placa.obj"; // (Exemplo)
+
+    // NÍVEL 1: Fundação (Madeira)
+    // (Estamos criando um bloco de madeira, 1x1x6)
+    BlocoDestrutivel* b1 = new BlocoDestrutivel(MaterialTipo::MADEIRA, modeloBarra, 1.0f, 1.0f, 6.0f);
+    b1->inicializarFisica(dynamicsWorld, centro + btVector3(-L, Y_NIVEL1, -W*2), rotX);
+    blocos.push_back(b1);
     
-    createTargetBox(boxMass, btVector3(0.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(-1.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(1.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(0.0f, 1.5f, -16.0f));
-    
-    createTargetBox(boxMass, btVector3(-5.0f, 0.5f, -10.0f));
-    createTargetBox(boxMass, btVector3(-5.0f, 1.5f, -10.0f));
-    createTargetBox(boxMass, btVector3(5.0f, 0.5f, -14.0f));
-    createTargetBox(boxMass, btVector3(5.0f, 1.5f, -14.0f));
-    
+    BlocoDestrutivel* b2 = new BlocoDestrutivel(MaterialTipo::MADEIRA, modeloBarra, 1.0f, 1.0f, 6.0f);
+    b2->inicializarFisica(dynamicsWorld, centro + btVector3( 0, Y_NIVEL1, -W*2), rotX);
+    blocos.push_back(b2);
+
+    // NÍVEL 2: Paredes (Pedra)
+    BlocoDestrutivel* b3 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 1.0f, 1.0f, 6.0f);
+    b3->inicializarFisica(dynamicsWorld, centro + btVector3(-L-W, Y_NIVEL2, 0), rotZ);
+    blocos.push_back(b3);
+
+    // NÍVEL 3: Teto (Gelo - Placa)
+    // (Criando uma placa de 6x1x6)
+    // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
+    // b4->inicializarFisica(dynamicsWorld, centro + btVector3(-L/2, Y_NIVEL3, 0), rotX);
+    // blocos.push_back(b4);
     trees.clear();
     trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
     trees.push_back(Tree(-9.0f, 0.0f, -10.0f, 12.5f));
@@ -498,6 +545,7 @@ void keyboard(unsigned char key, int x, int y) {
             // Recria o mundo, caixas e árvores
             initBullet(); 
             
+            
             // Reseta o estado do estilingue
             if (g_slingshotManager) {
                 g_slingshotManager->reset();
@@ -565,19 +613,25 @@ void display() {
               0.0f, 1.0f, 0.0f);
     
     // Configuração da Luz
-    glEnable(GL_LIGHTING);
+glEnable(GL_LIGHTING); //
     glEnable(GL_LIGHT0);
     
     GLfloat lightPos[] = {10.0f, 15.0f, 10.0f, 1.0f};
-    GLfloat lightAmb[] = {0.4f, 0.4f, 0.4f, 1.0f};
-    GLfloat lightDif[] = {1.0f, 1.0f, 0.9f, 1.0f};
-    GLfloat lightSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
+    
+    // MUDE ISTO (Deixa as sombras mais claras):
+    // DE: GLfloat lightAmb[] = {0.4f, 0.4f, 0.4f, 1.0f};
+    GLfloat lightAmb[] = {0.8f, 0.8f, 0.8f, 1.0f};
+
+    // MUDE ISTO (Mantém a luz principal clara):
+    // DE: GLfloat lightDif[] = {1.0f, 1.0f, 0.9f, 1.0f};
+    GLfloat lightDif[] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // MUDE ISTO (Remove o brilho "realista"):
+    // DE: GLfloat lightSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
+    GLfloat lightSpec[] = {0.0f, 0.0f, 0.0f, 1.0f};
     
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmb);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDif);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpec);
-    
     // --- Renderização da Cena ---
     
     drawGround();
@@ -600,6 +654,11 @@ void display() {
         // red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
     }
     
+    //desenha os blocos
+    for (auto& bloco : blocos) {
+        bloco->desenhar();
+    }
+
     // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
@@ -634,19 +693,26 @@ void display() {
                     glColor3f(0.6f, 0.4f, 0.2f); // Madeira
                 }
                 
-                glutSolidCube(1.0);
+                if (blockModelLoaded) {
+                    // Se o modelo carregou, desenha o .obj
+                    glScalef(5.0, 5.0, 5.0);
+                    blockModel.draw();
+                } else {
+                    // Senão, desenha o cubo antigo como fallback
+                    glutSolidCube(1.0);
+                }
                 
                 // (Contorno da caixa)
-                glDisable(GL_LIGHTING);
-                glColor3f(0.3f, 0.2f, 0.1f);
-                glLineWidth(2.0f);
-                glBegin(GL_LINES);
-                glVertex3f(-0.5f, 0.0f, -0.5f);
-                glVertex3f(0.5f, 0.0f, -0.5f);
-                glVertex3f(-0.5f, 0.0f, 0.5f);
-                glVertex3f(0.5f, 0.0f, 0.5f);
-                glEnd();
-                glEnable(GL_LIGHTING);
+                // glDisable(GL_LIGHTING);
+                // glColor3f(0.3f, 0.2f, 0.1f);
+                // glLineWidth(2.0f);
+                // glBegin(GL_LINES);
+                // glVertex3f(-0.5f, 0.0f, -0.5f);
+                // glVertex3f(0.5f, 0.0f, -0.5f);
+                // glVertex3f(-0.5f, 0.0f, 0.5f);
+                // glVertex3f(0.5f, 0.0f, 0.5f);
+                // glEnd();
+                // glEnable(GL_LIGHTING);
             }
             
             glPopMatrix();
@@ -654,6 +720,8 @@ void display() {
     }
     
     glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
+
+    g_particleManager.draw();
     
     drawHUD();
     
@@ -661,9 +729,62 @@ void display() {
 }
 
 void timer(int value) {
+
+    float deltaTime = 1.0f / 60.0f;
+
     // Simula a física
-    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10);
+    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
     
+    for (auto& bloco : blocos) {
+        bloco->update(deltaTime);
+    }
+
+    g_particleManager.update(deltaTime);
+
+    //bloco adicionado para lidar com a colisao dos blocos
+    int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
+    for (int i = 0; i < numManifolds; i++) {
+        btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
+        const btCollisionObject* obA = contactManifold->getBody0();
+        const btCollisionObject* obB = contactManifold->getBody1();
+
+        // Tenta encontrar o pássaro e um bloco
+        BlocoDestrutivel* bloco = nullptr;
+        
+        for (auto& b : blocos) {
+            if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
+                bloco = b;
+                break;
+            }
+        }
+        
+        bool passaroEnvolvido = (obA == red->getRigidBody() || obB == red->getRigidBody());
+
+        // Se o pássaro colidiu com um bloco
+        if (bloco && passaroEnvolvido) {
+            float impulsoTotal = 0;
+            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+            }
+            
+            // Converte o impulso da física em "dano"
+            float dano = impulsoTotal * 0.1f; 
+            if (dano > 0.5f) { // Limite mínimo para registrar dano
+                bloco->aplicarDano(dano);
+            }
+        }
+    }
+
+    // 2. Limpa blocos destruídos
+    for (int i = blocos.size() - 1; i >= 0; i--) {
+        if (blocos[i]->isDestruido()) {
+            blocos[i]->limparFisica(dynamicsWorld);
+            delete blocos[i];
+            blocos.erase(blocos.begin() + i);
+            // score += blocos[i]->getPontuacao(); // Adiciona pontuação
+        }
+    }
+
     // Atualiza a física do estilingue (ex: malha voltando)
     if (g_slingshotManager) {
         g_slingshotManager->update();
@@ -708,7 +829,9 @@ void reshape(int w, int h) {
 
 void init() {
     glEnable(GL_DEPTH_TEST);
+    glShadeModel(GL_FLAT);
     glEnable(GL_LINE_SMOOTH);
+    glDisable(GL_CULL_FACE);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -725,6 +848,11 @@ void init() {
     // 1. Inicializa a física
     initBullet();
     
+    //carrega as texturas dos blocos
+            for (auto& bloco : blocos) {
+                bloco->carregarTexturas();
+            }
+
     // 2. Cria a instância do gerenciador do estilingue
     //    (O ponteiro 'red' já foi criado na 'main')
     g_slingshotManager = new SlingshotManager(dynamicsWorld, red, &shotsRemaining, &gameOver);
@@ -734,11 +862,11 @@ void init() {
     // 4. Carregar modelo da árvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     const char* possiblePaths[] = {
-        "Objetos/arvore2.obj",
-        "./Objetos/arvore2.obj",
-        "../Objetos/arvore2.obj",
-        "arvore2.obj",
-        "tree2.obj"
+        "Objetos/arvore3.obj",
+        "./Objetos/arvore3.obj",
+        "../Objetos/arvore3.obj",
+        "arvore3.obj",
+        "tree3.obj"
     };
     treeModelLoaded = false;
     for (const char* path : possiblePaths) {
@@ -753,6 +881,27 @@ void init() {
         printf("  Modelo OBJ nao encontrado. Usando geometria procedural.\n");
     }
     
+    //bloco do tipo barra
+    printf("\nTentando carregar modelo OBJ do bloco...\n");
+    const char* blockPaths[] = {
+        "Objetos/bloco.obj",
+        "./Objetos/bloco.obj",
+        "../Objetos/bloco.obj",
+        "bloco.obj"
+    };
+    blockModelLoaded = false;
+    for (const char* path : blockPaths) {
+        printf("  Tentando: %s\n", path);
+        if (blockModel.loadFromFile(path)) {
+            blockModelLoaded = true;
+            printf("  ✓ Modelo do bloco carregado de: %s\n", path);
+            break;
+        }
+    }
+    if (!blockModelLoaded) {
+        printf("  Aviso: Modelo OBJ do bloco nao encontrado. Usando cubo procedural.\n");
+    }
+
     // (Impressão dos controles)
     printf("\n=== ESTILINGUE 3D MELHORADO ===\n");
     printf("CONTROLES:\n");
