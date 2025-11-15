@@ -117,7 +117,7 @@ public:
         estaAnimandoDestruicao(false), animDestruicaoTimer(0.0f), animDestruicaoDuracao(0.5f) // 0.5 segundos encolhendo
     {
         // 1. Define as dimensões da FÍSICA (btBoxShape usa "meias-extensões")
-        dimensoes = btVector3(w * 0.5f, h * 0.5f, d * 0.5f);
+        dimensoes = btVector3(w * 0.5f, h*0.5f, d * 0.5f);
         
         // 2. Define as propriedades com base no material
         tipoMaterial = tipo;
@@ -136,7 +136,7 @@ public:
             case MaterialTipo::PEDRA:
                 prefixoTextura = "pedra";
                 massa = 12.0f;
-                saudeTotal = 20.0f;
+                saudeTotal = 10.0f;
                 atrito = 0.8f;
                 restituicao = 0.05f;
                 pontuacaoValor = 300;
@@ -159,7 +159,7 @@ public:
         // (Isso assume que seu modelo .obj é uma "barra")
         // Ex: "texturas/madeira_barra.png"
         // Ex: "texturas/madeira_barra_danificada.png"
-        std::string forma = (d > w * 1.5f || d > h * 1.5f) ? "barra" : "placa";
+        std::string forma = "barra";
         texturaNomeInteiro = "Objetos/texturas/" + prefixoTextura + "_" + forma + ".png";
         texturaNomeDanificado = "Objetos/texturas/" + prefixoTextura + "_" + forma + "_danificada.png";
 

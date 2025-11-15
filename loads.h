@@ -444,7 +444,7 @@ struct OBJModel {
         // Aplica a normalização iterando por todos os vértices FINAIS
         for (size_t i = 0; i < vertices.size(); i += 3) {
             vertices[i] = (vertices[i] - centerX) * normalizeScale;
-            vertices[i+1] = (vertices[i+1] - minY) * normalizeScale;
+            vertices[i+1] = (vertices[i+1] - centerY) * normalizeScale;
             vertices[i+2] = (vertices[i+2] - centerZ) * normalizeScale;
         }
 

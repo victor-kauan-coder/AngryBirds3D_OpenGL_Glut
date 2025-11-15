@@ -9,7 +9,7 @@
 #include <sstream>
 #include <string>
 
-
+#include "stb_image.h"
 #include "loads.h" 
 #include "passaros/passaro.h"
 #include "passaros/Red.h"
@@ -33,7 +33,7 @@ btDiscreteDynamicsWorld* dynamicsWorld;
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
 btCollisionShape* projectileShape = nullptr; // Mantido para o Bullet
 btCollisionShape* boxShape = nullptr;
-
+btRigidBody* groundRigidBody = nullptr;
 btBroadphaseInterface* broadphase = nullptr;
 btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
@@ -45,6 +45,8 @@ OBJModel treeModel;
 bool treeModelLoaded = false;
 bool blockModelLoaded = false;
 
+
+GLuint g_skyTextureID = 0;
 // --- Classe Tree (sem alterações) ---
 class Tree {
 public:
@@ -65,7 +67,13 @@ public:
         
         if (treeModelLoaded) {
             // glColor3f(0.3f, 0.5f, 0.2f);
+            glEnable(GL_LIGHTING);
+            glDisable(GL_COLOR_MATERIAL);
+            glPushMatrix();
+            glTranslatef(0.0f, 0.3f, 0.0f);
             treeModel.draw();
+            glPopMatrix();
+            glEnable(GL_COLOR_MATERIAL);
         } else {
             drawProceduralTree();
         }
@@ -143,6 +151,34 @@ btRigidBody* createTargetBox(float mass, const btVector3& position, const btQuat
     return body;
 }
 
+GLuint loadGlobalTexture(const char* filename) {
+    int width, height, nrChannels;
+    stbi_set_flip_vertically_on_load(true); 
+    
+    unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
+    if (!data) {
+        printf("Aviso: Nao foi possivel carregar a textura %s\n", filename);
+        return 0; 
+    }
+
+    GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+
+    GLuint textureID;
+    glGenTextures(1, &textureID); 
+    glBindTexture(GL_TEXTURE_2D, textureID); 
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP); // <-- MUDANÇA AQUI
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+    stbi_image_free(data);
+    printf("Textura do ceu carregada: %s (ID: %u)\n", filename, textureID);
+    return textureID;
+}
+
 void initBullet() {
     broadphase = new btDbvtBroadphase();
     collisionConfiguration = new btDefaultCollisionConfiguration();
@@ -161,10 +197,14 @@ void initBullet() {
     btRigidBody::btRigidBodyConstructionInfo groundRigidBodyCI(
         0, groundMotionState, groundShape, btVector3(0, 0, 0));
     
-    btRigidBody* groundRigidBody = new btRigidBody(groundRigidBodyCI);
+    // btRigidBody* groundRigidBody = new btRigidBody(groundRigidBodyCI);
     
-    groundRigidBody->setFriction(0.8f);
-    groundRigidBody->setRestitution(0.3f);
+    groundRigidBody = new btRigidBody(groundRigidBodyCI);
+
+    groundRigidBody->setFriction(2.0f);
+
+    // groundRigidBody->setFriction(0.8f);
+    // groundRigidBody->setRestitution(0.3f);
     
     dynamicsWorld->addRigidBody(groundRigidBody);
 
@@ -219,23 +259,50 @@ void initBullet() {
     btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0);
     
     // (Caminhos para os seus modelos .obj)
-    const char* modeloBarra = "Objetos/bloco_barra.obj";
+    const char* modeloBarra = "Objetos/bloco_barra2.obj";
     const char* modeloPlaca = "Objetos/bloco_placa.obj"; // (Exemplo)
 
-    // NÍVEL 1: Fundação (Madeira)
-    // (Estamos criando um bloco de madeira, 1x1x6)
-    BlocoDestrutivel* b1 = new BlocoDestrutivel(MaterialTipo::MADEIRA, modeloBarra, 1.0f, 1.0f, 6.0f);
-    b1->inicializarFisica(dynamicsWorld, centro + btVector3(-L, Y_NIVEL1, -W*2), rotX);
-    blocos.push_back(b1);
-    
-    BlocoDestrutivel* b2 = new BlocoDestrutivel(MaterialTipo::MADEIRA, modeloBarra, 1.0f, 1.0f, 6.0f);
-    b2->inicializarFisica(dynamicsWorld, centro + btVector3( 0, Y_NIVEL1, -W*2), rotX);
-    blocos.push_back(b2);
+    float blockW = 1.0f; 
+    float blockH = 6.0f; 
+    float blockD = 1.0f; 
 
-    // NÍVEL 2: Paredes (Pedra)
-    BlocoDestrutivel* b3 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 1.0f, 1.0f, 6.0f);
-    b3->inicializarFisica(dynamicsWorld, centro + btVector3(-L-W, Y_NIVEL2, 0), rotZ);
-    blocos.push_back(b3);
+    // --- Definições de Layout Uniforme (Uma Parede) ---
+    int numBlocos = 12; 
+    float espacamentoX = blockW + 0.5f; 
+    
+    // CORREÇÃO AQUI: REMOVA 'float'
+    Y_NIVEL1 = (blockH/ 2.0f) + 0.02f; // (0.25f + 0.02f = 0.27f)
+    
+    btVector3 centroParede(0.0f, 0.0f, -15.0f); 
+    
+    // CORREÇÃO AQUI: REMOVA 'btQuaternion'
+    rotZ = btQuaternion(0, 0, 0, 1);
+
+    // Calcula o X inicial para centralizar a parede
+    float startX = -(float(numBlocos - 1) * espacamentoX) / 2.0f;
+
+    // Array de materiais para variar
+    MaterialTipo materiais[] = { MaterialTipo::MADEIRA, MaterialTipo::GELO, MaterialTipo::PEDRA };
+    int numMateriais = 3;
+
+    // --- Loop para criar os 12 blocos ---
+    for (int i = 0; i < numBlocos; i++) {
+        // Escolhe um material (Madeira, Gelo, Pedra, Madeira, Gelo...)
+        MaterialTipo tipo = materiais[i % numMateriais]; 
+        
+        // Calcula a posição X deste bloco
+        float posX = startX + (i * espacamentoX);
+        
+        // 1. Cria o novo bloco
+
+        BlocoDestrutivel* bloco = new BlocoDestrutivel(tipo, modeloBarra, blockW, blockH, blockD);
+        
+        // 2. Inicializa a física na posição correta
+        bloco->inicializarFisica(dynamicsWorld, centroParede + btVector3(posX, Y_NIVEL1, 0.0f), rotZ);
+        
+        // 3. Adiciona à lista
+        blocos.push_back(bloco);
+    }
 
     // NÍVEL 3: Teto (Gelo - Placa)
     // (Criando uma placa de 6x1x6)
@@ -278,94 +345,138 @@ void initBullet() {
 
 // --- Funções de Renderização da Cena ---
 
+// void drawSky() {
+//     glDisable(GL_LIGHTING);
+//     glDisable(GL_DEPTH_TEST);
+    
+//     glMatrixMode(GL_PROJECTION);
+//     glPushMatrix();
+//     glLoadIdentity();
+//     glOrtho(0, 1, 0, 1, -1, 1);
+    
+//     glMatrixMode(GL_MODELVIEW);
+//     glPushMatrix();
+//     glLoadIdentity();
+    
+//     // (Código do céu, nuvens, sol, montanhas - sem alterações)
+//     glBegin(GL_QUADS);
+//     glColor3f(0.4f, 0.6f, 0.9f);
+//     glVertex2f(0, 1);
+//     glVertex2f(1, 1);
+//     glColor3f(0.7f, 0.85f, 0.95f);
+//     glVertex2f(1, 0.3f);
+//     glVertex2f(0, 0.3f);
+//     glEnd();
+    
+//     glColor3f(1.0f, 0.95f, 0.7f);
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.8f, 0.8f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.8f + cos(angle) * 0.08f, 0.8f + sin(angle) * 0.08f);
+//     }
+//     glEnd();
+    
+//     glColor4f(1.0f, 1.0f, 1.0f, 0.7f);
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.2f, 0.85f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.2f + cos(angle) * 0.06f, 0.85f + sin(angle) * 0.03f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.25f, 0.87f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.25f + cos(angle) * 0.05f, 0.87f + sin(angle) * 0.025f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.55f, 0.9f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.55f + cos(angle) * 0.07f, 0.9f + sin(angle) * 0.035f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.6f, 0.88f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.6f + cos(angle) * 0.05f, 0.88f + sin(angle) * 0.025f);
+//     }
+//     glEnd();
+    
+//     glColor3f(0.5f, 0.6f, 0.7f);
+//     glBegin(GL_TRIANGLES);
+//     glVertex2f(0.0f, 0.3f);
+//     glVertex2f(0.2f, 0.55f);
+//     glVertex2f(0.4f, 0.3f);
+    
+//     glVertex2f(0.3f, 0.3f);
+//     glVertex2f(0.5f, 0.6f);
+//     glVertex2f(0.7f, 0.3f);
+    
+//     glVertex2f(0.6f, 0.3f);
+//     glVertex2f(0.85f, 0.5f);
+//     glVertex2f(1.0f, 0.3f);
+//     glEnd();
+    
+//     glPopMatrix();
+//     glMatrixMode(GL_PROJECTION);
+//     glPopMatrix();
+//     glMatrixMode(GL_MODELVIEW);
+    
+//     glEnable(GL_DEPTH_TEST);
+//     glEnable(GL_LIGHTING);
+// }
 void drawSky() {
     glDisable(GL_LIGHTING);
-    glDisable(GL_DEPTH_TEST);
-    
+    glDisable(GL_DEPTH_TEST); // O céu não deve testar profundidade
+    glDepthMask(GL_FALSE);    // O céu não deve ESCREVER na profundidade
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, g_skyTextureID);
+
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0, 1, 0, 1, -1, 1);
-    
+    // Aumenta a área de visualização verticalmente para "dar zoom out" no céu
+    // Aumente o segundo parâmetro (top) para ver mais céu.
+    glOrtho(0, 1, 0, 1.2, -1, 1); // Exemplo: 0 a 1.5 no Y para "zoom out"
+                                  // Se 1.5 for demais, tente 1.2 ou 1.3
+
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
-    
-    // (Código do céu, nuvens, sol, montanhas - sem alterações)
+
+    glColor3f(1.0f, 1.0f, 1.0f); // Cor branca (para não manchar a textura)
+
     glBegin(GL_QUADS);
-    glColor3f(0.4f, 0.6f, 0.9f);
-    glVertex2f(0, 1);
-    glVertex2f(1, 1);
-    glColor3f(0.7f, 0.85f, 0.95f);
-    glVertex2f(1, 0.3f);
-    glVertex2f(0, 0.3f);
+        // Canto inferior esquerdo (onde o chão encontra o céu)
+        glTexCoord2f(0, 0); glVertex2f(0, 0); 
+        // Canto inferior direito
+        glTexCoord2f(1, 0); glVertex2f(1, 0); 
+        // Canto superior direito
+        // Ajuste o glTexCoord2f(..., Y_TEXTURA_MAX) para puxar mais céu para baixo
+        // Se a imagem tiver mais céu na parte de cima que você quer mostrar:
+        glTexCoord2f(1, 1); glVertex2f(1, 1.5); // O 1.5 aqui corresponde ao glOrtho
+        // Canto superior esquerdo
+        glTexCoord2f(0, 1); glVertex2f(0, 1.5); // O 1.5 aqui corresponde ao glOrtho
     glEnd();
-    
-    glColor3f(1.0f, 0.95f, 0.7f);
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.8f, 0.8f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.8f + cos(angle) * 0.08f, 0.8f + sin(angle) * 0.08f);
-    }
-    glEnd();
-    
-    glColor4f(1.0f, 1.0f, 1.0f, 0.7f);
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.2f, 0.85f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.2f + cos(angle) * 0.06f, 0.85f + sin(angle) * 0.03f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.25f, 0.87f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.25f + cos(angle) * 0.05f, 0.87f + sin(angle) * 0.025f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.55f, 0.9f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.55f + cos(angle) * 0.07f, 0.9f + sin(angle) * 0.035f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.6f, 0.88f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.6f + cos(angle) * 0.05f, 0.88f + sin(angle) * 0.025f);
-    }
-    glEnd();
-    
-    glColor3f(0.5f, 0.6f, 0.7f);
-    glBegin(GL_TRIANGLES);
-    glVertex2f(0.0f, 0.3f);
-    glVertex2f(0.2f, 0.55f);
-    glVertex2f(0.4f, 0.3f);
-    
-    glVertex2f(0.3f, 0.3f);
-    glVertex2f(0.5f, 0.6f);
-    glVertex2f(0.7f, 0.3f);
-    
-    glVertex2f(0.6f, 0.3f);
-    glVertex2f(0.85f, 0.5f);
-    glVertex2f(1.0f, 0.3f);
-    glEnd();
-    
+
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
-    
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHTING);
+
+    glDisable(GL_TEXTURE_2D);
+    glDepthMask(GL_TRUE); // Habilita a escrita na profundidade novamente
+    glEnable(GL_DEPTH_TEST); // Habilita o teste de profundidade novamente
 }
 
 void drawGround() {
@@ -655,8 +766,12 @@ glEnable(GL_LIGHTING); //
     }
     
     //desenha os blocos
+    //corrigi o bug da hitbox invisivel 
     for (auto& bloco : blocos) {
+        glPushMatrix();
+        // glTranslatef(0.0f, -2.5f, 0.0f);
         bloco->desenhar();
+        glPopMatrix();
     }
 
     // Desenha todos os outros corpos rígidos (as caixas)
@@ -773,6 +888,19 @@ void timer(int value) {
                 bloco->aplicarDano(dano);
             }
         }
+        bool blocoEnvolvido = (bloco != nullptr);
+        bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
+
+        if (blocoEnvolvido && chaoEnvolvido) {
+            float impulsoTotal = 0;
+            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+            }
+            float dano = impulsoTotal * 0.1f; // Ajuste o fator conforme a força desejada
+            if (dano > 0.5f) { // Limite mínimo para registrar dano
+                bloco->aplicarDano(dano);
+            }
+        }
     }
 
     // 2. Limpa blocos destruídos
@@ -845,6 +973,11 @@ void init() {
     glMaterialfv(GL_FRONT, GL_SPECULAR, spec);
     glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
     
+
+    g_skyTextureID = loadGlobalTexture("Objetos/texturas/fundo_ceu22.png"); 
+    if (g_skyTextureID == 0) {
+        printf("ERRO: Falha ao carregar a textura do ceu.\n");
+    }
     // 1. Inicializa a física
     initBullet();
     
@@ -862,10 +995,10 @@ void init() {
     // 4. Carregar modelo da árvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     const char* possiblePaths[] = {
-        "Objetos/arvore3.obj",
-        "./Objetos/arvore3.obj",
-        "../Objetos/arvore3.obj",
-        "arvore3.obj",
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
         "tree3.obj"
     };
     treeModelLoaded = false;
