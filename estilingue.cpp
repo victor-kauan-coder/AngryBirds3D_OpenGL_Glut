@@ -974,7 +974,7 @@ void init() {
     glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
     
 
-    g_skyTextureID = loadGlobalTexture("Objetos/texturas/fundo_ceu22.png"); 
+    g_skyTextureID = loadGlobalTexture("Objetos/texturas/fundo_ceu_borrado.png"); 
     if (g_skyTextureID == 0) {
         printf("ERRO: Falha ao carregar a textura do ceu.\n");
     }

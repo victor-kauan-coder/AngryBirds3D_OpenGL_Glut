@@ -5,7 +5,7 @@ TARGET = estilingue.exe
 
 # --- Arquivos do Projeto ---
 # Lista de todos os seus arquivos .cpp
-SOURCES = estilingue.cpp SlingshotManager.cpp
+SOURCES = estilingue.cpp SlingshotManager.cpp stb_impl.cpp
 # Converte a lista de .cpp para .o (arquivos objeto)
 OBJECTS = $(SOURCES:.cpp=.o)
 
