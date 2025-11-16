@@ -8,12 +8,14 @@
 #include <string>
 #include <btBulletDynamicsCommon.h>
 #include "../loads.h"
-
+#include "../audio_manager.h"
 #include <cmath> 
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+extern AudioManager g_audioManager;
 /**
  * Classe base Passaro - Representa um pássaro do Angry Birds
  * Todos os tipos específicos de pássaros herdarão desta classe
@@ -289,6 +291,9 @@ public:
         rigidBody->setAngularVelocity(btVector3(0, 0, velX * 0.5f));
         
         emVoo = true;
+
+        g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
+        
     }
     
     /**

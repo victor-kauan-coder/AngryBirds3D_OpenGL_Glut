@@ -26,6 +26,12 @@ enum class SomTipo {
     BLOCO_PEDRA_DESTRUIDO,
     BLOCO_GELO_DESTRUIDO,
     LANCAMENTO_PASSARO,
+    ESTILINGUE_PUXANDO,
+    ESTILINGUE_SOLTANDO,
+    COLISAO_GELO,
+    COLISAO_MADEIRA,
+    COLISAO_PEDRA,
+    COLISAO_PASSARO,
     TIPO_MAX
 };
 
@@ -83,6 +89,29 @@ public:
                 break;
             case MaterialTipo::GELO:
                 play(SomTipo::BLOCO_GELO_DESTRUIDO, volume);
+                break;
+            default:
+                break;
+        }
+    }
+    void playSlingshot(bool puxando,int volume=60) {
+        SomTipo som = puxando ? SomTipo::ESTILINGUE_PUXANDO : SomTipo::ESTILINGUE_SOLTANDO;
+        play(som,volume);
+    }
+
+    void playPassaro(SomTipo tipoSom,int volume=50){
+        play(tipoSom, volume);
+    }
+    void playColisao(MaterialTipo material, int volume = 60){
+                switch (material) {
+            case MaterialTipo::MADEIRA:
+                play(SomTipo::COLISAO_MADEIRA, volume);
+                break;
+            case MaterialTipo::PEDRA:
+                play(SomTipo::COLISAO_PEDRA, volume);
+                break;
+            case MaterialTipo::GELO:
+                play(SomTipo::COLISAO_GELO, volume);
                 break;
             default:
                 break;
