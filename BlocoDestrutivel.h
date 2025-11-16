@@ -11,19 +11,16 @@
 // Exatamente como em passaro.h
 #include "loads.h"
 #include "ParticleManager.h"
+#include "audio_manager.h"
 #include "stb_image.h"
-
+#include "enums.h"
 // --- ENUMS para facilitar a configuração ---
 
 /**
  * @enum MaterialTipo
  * @brief Define as propriedades físicas e de jogo do bloco.
  */
-enum class MaterialTipo {
-    MADEIRA,
-    PEDRA,
-    GELO
-};
+
 
 /**
  * @enum EstadoDano
@@ -37,6 +34,8 @@ enum class EstadoDano {
 };
 
 extern ParticleManager g_particleManager;
+extern AudioManager g_audioManager;
+
 
 /**
  * @class BlocoDestrutivel
@@ -297,7 +296,7 @@ void aplicarDano(float dano) {
             btVector3 pos = corpoRigido->getCenterOfMassPosition();
             // Cria a explosão de partículas com a cor do material
             g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
-            
+            g_audioManager.playDestruction(tipoMaterial);
             // Não limpe a física aqui, a animação precisa tocar primeiro!
         }
     }
@@ -338,7 +337,6 @@ void aplicarDano(float dano) {
             // Aplica a escala de encolhimento
             glScalef(escala, escala, escala);
         }
-
         // --- Correção da Escala da Normalização (código original) ---
         float maxDimOriginal = std::max({dimensoes.x()*2, dimensoes.y()*2, dimensoes.z()*2});
         float escalaNecessaria = maxDimOriginal / 0.6f;
