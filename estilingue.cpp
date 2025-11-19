@@ -8,12 +8,23 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include "Loads.h"
+
+#include "stb_image.h"
+#include "loads.h" 
 #include "passaros/passaro.h"
 #include "passaros/Red.h"
+#include "BlocoDestrutivel.h"
+#include "SlingshotManager.h"
+#include "ParticleManager.h"
+#include "porcos/porco.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+// --- Includes de Áudio (exemplo) ---
+// (espaço para seus includes de áudio)
+
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
@@ -21,23 +32,23 @@ const int HEIGHT = 720;
 // Mundo de física Bullet
 btDiscreteDynamicsWorld* dynamicsWorld;
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
-btCollisionShape* projectileShape = nullptr;
-// btRigidBody* projectileBody = nullptr; // REMOVIDO: Agora usa red->getRigidBody()
+btCollisionShape* projectileShape = nullptr; // Mantido para o Bullet
 btCollisionShape* boxShape = nullptr;
-
+btRigidBody* groundRigidBody = nullptr;
 btBroadphaseInterface* broadphase = nullptr;
 btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
-
-// NOVO: Estrutura para Material MTL
-// NOVO: Estrutura para carregar e renderizar modelos OBJ com MTL
-
-
+ParticleManager g_particleManager;
 // Modelos OBJ globais
+OBJModel blockModel;
 OBJModel treeModel;
 bool treeModelLoaded = false;
+bool blockModelLoaded = false;
 
+
+GLuint g_skyTextureID = 0;
+// --- Classe Tree (sem alterações) ---
 class Tree {
 public:
     float x, y, z;
@@ -56,8 +67,14 @@ public:
         glScalef(scale, scale, scale);
         
         if (treeModelLoaded) {
-            glColor3f(0.3f, 0.5f, 0.2f);
+            // glColor3f(0.3f, 0.5f, 0.2f);
+            glEnable(GL_LIGHTING);
+            glDisable(GL_COLOR_MATERIAL);
+            glPushMatrix();
+            glTranslatef(0.0f, 0.3f, 0.0f);
             treeModel.draw();
+            glPopMatrix();
+            glEnable(GL_COLOR_MATERIAL);
         } else {
             drawProceduralTree();
         }
@@ -89,45 +106,33 @@ private:
         glutSolidSphere(foliageRadius * 0.7f, 10, 10);
     }
 };
-
 std::vector<Tree> trees;
 
-struct Slingshot {
-    float baseX, baseY, baseZ;
-    float leftArmX, leftArmY, leftArmZ;
-    float rightArmX, rightArmY, rightArmZ;
-    float leftTopX, leftTopY, leftTopZ;
-    float rightTopX, rightTopY, rightTopZ;
-    float pouchX, pouchY, pouchZ;
-    bool isPulling;
-} slingshot;
 
-int mouseX = 0, mouseY = 0;
-bool mousePressed = false;
+// --- Variáveis Globais ---
+SlingshotManager* g_slingshotManager = nullptr; // Ponteiro para o gerenciador
 
-int startMouseX = 0;
-int startMouseY = 0;
-float startPouchX = 0.0f;
-float startPouchY = 0.0f;
-float startPouchZ = 0.0f;
-
+// Variáveis globais de câmera e jogo
 float cameraAngleH = 45.0f;
 float cameraAngleV = 20.0f;
-float cameraDistance = 18.0f;
+float cameraDistance = 28.0f;
 float cameraTargetY = 3.0f;
 
 int score = 0;
 int shotsRemaining = 8;
 bool gameOver = false;
 
-float pullDepth = 0.0f;
-
 std::vector<btRigidBody*> targetBodies;
-PassaroRed* red;
-btRigidBody* createTargetBox(float mass, const btVector3& position) {
+PassaroRed* red; // Ponteiro para o nosso pássaro
+std::vector<BlocoDestrutivel*> blocos;
+std::vector<Porco*> porcos;
+// --- Funções do Jogo ---
+
+btRigidBody* createTargetBox(float mass, const btVector3& position, const btQuaternion& rotation = btQuaternion(0, 0, 0, 1)) {
     btTransform startTransform;
     startTransform.setIdentity();
     startTransform.setOrigin(position);
+    startTransform.setRotation(rotation); // <-- ÚNICA LINHA ADICIONADA/MODIFICADA
     
     btVector3 localInertia(0, 0, 0);
     if (mass != 0.f)
@@ -137,12 +142,43 @@ btRigidBody* createTargetBox(float mass, const btVector3& position) {
     btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxShape, localInertia);
     btRigidBody* body = new btRigidBody(rbInfo);
     
-    body->setFriction(1.0f);
+    // Configurações de CCD e física
+    body->setCcdMotionThreshold(0.5f);
+    body->setFriction(2.0f);
     body->setRestitution(0.1f);
+    body->setDamping(0.3f, 0.3f);
     
     dynamicsWorld->addRigidBody(body);
     targetBodies.push_back(body);
     return body;
+}
+
+GLuint loadGlobalTexture(const char* filename) {
+    int width, height, nrChannels;
+    stbi_set_flip_vertically_on_load(true); 
+    
+    unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
+    if (!data) {
+        printf("Aviso: Nao foi possivel carregar a textura %s\n", filename);
+        return 0; 
+    }
+
+    GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+
+    GLuint textureID;
+    glGenTextures(1, &textureID); 
+    glBindTexture(GL_TEXTURE_2D, textureID); 
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP); // <-- MUDANÇA AQUI
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+    stbi_image_free(data);
+    printf("Textura do ceu carregada: %s (ID: %u)\n", filename, textureID);
+    return textureID;
 }
 
 void initBullet() {
@@ -163,48 +199,152 @@ void initBullet() {
     btRigidBody::btRigidBodyConstructionInfo groundRigidBodyCI(
         0, groundMotionState, groundShape, btVector3(0, 0, 0));
     
-    btRigidBody* groundRigidBody = new btRigidBody(groundRigidBodyCI);
+    // btRigidBody* groundRigidBody = new btRigidBody(groundRigidBodyCI);
     
-    groundRigidBody->setFriction(0.8f);
-    groundRigidBody->setRestitution(0.3f);
+    groundRigidBody = new btRigidBody(groundRigidBodyCI);
+
+    groundRigidBody->setFriction(2.0f);
+
+    // groundRigidBody->setFriction(0.8f);
+    // groundRigidBody->setRestitution(0.3f);
     
     dynamicsWorld->addRigidBody(groundRigidBody);
-    projectileShape = new btSphereShape(0.3f);
+
+    // O projectileShape ainda é necessário para o *conceito* do SlingshotManager,
+    // embora estejamos passando o 'red'
+    projectileShape = new btSphereShape(0.3f); // 'red' usa este raio
     collisionShapes.push_back(projectileShape);
     
-    boxShape = new btBoxShape(btVector3(0.5f, 0.5f, 0.5f));
+    boxShape = new btBoxShape(btVector3(0.2f, 0.2f, 1.2f));
     collisionShapes.push_back(boxShape);
     
     targetBodies.clear();
+//     float boxMass = 2.0f;
+// float Y_BASE = 0.51f; 
+//     float Y_NIVEL2 = 1.52f; // Base (0.5) + Altura (1.0) + Folga
+//     float Y_NIVEL3 = 2.53f; // Nível 2 (1.5) + Altura (1.0) + Folga
+//     float Y_NIVEL4 = 3.54f; // Nível 3 (2.5) + Altura (1.0) + Folga
+
+//     // --- Definindo a Posição e Rotações ---
+//     btVector3 centroTorre(0.0f, 0.0f, -15.0f); // Posição central da construção
+//     float offset = 2.5f; // Distância do centro para os blocos
     
-    float boxMass = 1.0f;
+//     // Rotação Padrão (longo no eixo Z, como no seu btBoxShape)
+//     btQuaternion rotZ(0, 0, 0, 1);
+//     // Rotação 90 graus (gira em torno do Y para ficar longo no eixo X)
+//     btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0); 
+
+//     // --- Construindo a Torre ---
+//     // Nível 1 (Base, longo em Z)
+//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_BASE, 0), rotZ);
+//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_BASE, 0), rotZ);
+
+//     // Nível 2 (Meio, longo em X)
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2, -offset), rotX);
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2,  offset), rotX);
+
+//     // Nível 3 (Meio, longo em Z)
+//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_NIVEL3, 0), rotZ);
+//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_NIVEL3, 0), rotZ);
+
+//     // Nível 4 (Topo, longo em X)
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4, -offset), rotX);
+//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4,  offset), rotX);
+    float boxMass = 8.0f; // (Este valor agora é definido dentro da classe)
+
+    // Definições da construção
+    float H = 1.0f;  float G = 0.02f;
+    float Y_NIVEL1 = 0.5f + G*1; float Y_NIVEL2 = Y_NIVEL1 + H + G;
+    btVector3 centro(0.0f, 0.0f, -20.0f);
+    float L = 3.0f + G; float W = 0.5f + G;
+    btQuaternion rotZ(0, 0, 0, 1);
+    btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0);
     
-    createTargetBox(boxMass, btVector3(-2.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(-1.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(0.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(1.0f, 0.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(-0.5f, 1.5f, -8.0f));
-    createTargetBox(boxMass, btVector3(0.5f, 1.5f, -8.0f));
+    // (Caminhos para os seus modelos .obj)
+    const char* modeloBarra = "Objetos/bloco_barra2.obj";
+    const char* modeloPlaca = "Objetos/bloco_placa.obj"; // (Exemplo)
+
+    float blockW = 1.0f; 
+    float blockH = 6.0f; 
+    float blockD = 1.0f; 
+
+    // --- Definições de Layout Uniforme (Uma Parede) ---
+    int numBlocos = 12; 
+    float espacamentoX = blockW + 0.5f; 
     
-    createTargetBox(boxMass, btVector3(-3.0f, 0.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(-3.0f, 1.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(-3.0f, 2.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(2.0f, 0.5f, -12.0f));
-    createTargetBox(boxMass, btVector3(2.0f, 1.5f, -12.0f));
+    // CORREÇÃO AQUI: REMOVA 'float'
+    Y_NIVEL1 = (blockH/ 2.0f) + 0.02f; // (0.25f + 0.02f = 0.27f)
     
-    createTargetBox(boxMass, btVector3(0.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(-1.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(1.0f, 0.5f, -16.0f));
-    createTargetBox(boxMass, btVector3(0.0f, 1.5f, -16.0f));
+    btVector3 centroParede(0.0f, 0.0f, -15.0f); 
     
-    createTargetBox(boxMass, btVector3(-5.0f, 0.5f, -10.0f));
-    createTargetBox(boxMass, btVector3(-5.0f, 1.5f, -10.0f));
-    createTargetBox(boxMass, btVector3(5.0f, 0.5f, -14.0f));
-    createTargetBox(boxMass, btVector3(5.0f, 1.5f, -14.0f));
+    // CORREÇÃO AQUI: REMOVA 'btQuaternion'
+    rotZ = btQuaternion(0, 0, 0, 1);
+
+    // Calcula o X inicial para centralizar a parede
+    float startX = -(float(numBlocos - 1) * espacamentoX) / 2.0f;
+
+    // Array de materiais para variar
+    MaterialTipo materiais[] = { MaterialTipo::MADEIRA, MaterialTipo::GELO, MaterialTipo::PEDRA };
+    int numMateriais = 3;
+
+    // --- Loop para criar os 12 blocos ---
+    for (int i = 0; i < numBlocos; i++) {
+        // Escolhe um material (Madeira, Gelo, Pedra, Madeira, Gelo...)
+        MaterialTipo tipo = materiais[i % numMateriais]; 
+        
+        // Calcula a posição X deste bloco
+        float posX = startX + (i * espacamentoX);
+        
+        // 1. Cria o novo bloco
+
+        BlocoDestrutivel* bloco = new BlocoDestrutivel(tipo, modeloBarra, blockW, blockH, blockD);
+        
+        // 2. Inicializa a física na posição correta
+        bloco->inicializarFisica(dynamicsWorld, centroParede + btVector3(posX, Y_NIVEL1, 0.0f), rotZ);
+        
+        // 3. Adiciona à lista
+        blocos.push_back(bloco);
+    }
+
+    // --- CRIAÇÃO DOS PORCOS ---
+    porcos.clear(); // Limpa porcos de um jogo anterior
     
+    // Posições para os porcos (ex: em cima de alguns blocos)
+    float yPorco = Y_NIVEL1 + (blockH / 2.0f) + 0.7f; // Y do topo do bloco + raio do porco
+    
+    // Porco 1
+    float xPorco1 = startX + (3 * espacamentoX); // Em cima do 4º bloco
+    Porco* porco1 = new Porco();
+    porco1->carregarModelo("Objetos/porco.obj");
+    porco1->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco1, yPorco + 10, centroParede.z());
+    porcos.push_back(porco1);
+
+    // Porco 2
+    float xPorco2 = startX + (8 * espacamentoX); // Em cima do 9º bloco
+    Porco* porco2 = new Porco();
+    porco2->carregarModelo("Objetos/porco.obj");
+    porco2->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco2, yPorco, centroParede.z());
+    porcos.push_back(porco2);
+
+    float xPorco3 = startX + (6 * espacamentoX); // Em cima do 7º bloco
+    Porco* porco3 = new Porco();
+    porco3->carregarModelo("Objetos/porco.obj");
+    porco3->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco3, yPorco, centroParede.z());
+    porcos.push_back(porco3);
+
+
+    float xPorco4 = startX + (4 * espacamentoX); // Em cima do 9º bloco
+    Porco* porco4 = new Porco();
+    porco4->carregarModelo("Objetos/porco.obj");
+    porco4->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco4, yPorco, centroParede.z());
+    porcos.push_back(porco4);
+    // NÍVEL 3: Teto (Gelo - Placa)
+    // (Criando uma placa de 6x1x6)
+    // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
+    // b4->inicializarFisica(dynamicsWorld, centro + btVector3(-L/2, Y_NIVEL3, 0), rotX);
+    // blocos.push_back(b4);
     trees.clear();
-    trees.clear();
-    trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));  // Reduzido de 5.0 para 0.5
+    trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
     trees.push_back(Tree(-9.0f, 0.0f, -10.0f, 12.5f));
     trees.push_back(Tree(8.0f, 0.0f, -25.0f, 12.5f));
     trees.push_back(Tree(29.0f, 0.0f, -12.0f, 12.5f));
@@ -214,187 +354,163 @@ void initBullet() {
     trees.push_back(Tree(10.0f, 0.0f, -18.0f, 21.1f));
 }
 
-void clearProjectile() {
-    if (red && red->getRigidBody()) {
-        red->limparFisica();
-    }
-}
+//
+// --- [ INÍCIO DA ÁREA DE EXCLUSÃO ] ---
+//
+// As funções:
+// - clearProjectile()
+// - createProjectileInPouch()
+// - drawCylinder()
+// - drawWoodenBase()
+// - drawElastic()
+// - isTargetInAimLine()
+// - drawAimLine()
+// - updateElasticPhysics()
+// - updatePouchPosition()
+// - screenToWorld()
+//
+// ... FORAM REMOVIDAS DESTA ÁREA ...
+//
+// Elas agora são métodos privados da classe SlingshotManager.
+//
+// --- [ FIM DA ÁREA DE EXCLUSÃO ] ---
+//
 
-void createProjectileInPouch() {
-    clearProjectile();
-    
-    float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-    float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-    float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-    
-    slingshot.pouchX = restX;
-    slingshot.pouchY = restY;
-    slingshot.pouchZ = restZ;
-    
-    // SIMPLIFICADO: inicializarFisica já cria tudo!
-    red->inicializarFisica(dynamicsWorld, restX, restY, restZ);
-    
-    // Configura propriedades físicas adicionais
-    if (red->getRigidBody()) {
-        red->getRigidBody()->setCollisionFlags(
-            red->getRigidBody()->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT
-        );
-        red->getRigidBody()->setActivationState(DISABLE_DEACTIVATION);
-    }
-}
 
-void drawCylinder(float x1, float y1, float z1, float x2, float y2, float z2, float radius) {
-    float dx = x2 - x1;
-    float dy = y2 - y1;
-    float dz = z2 - z1;
-    float length = sqrt(dx*dx + dy*dy + dz*dz);
-    
-    if (length == 0.0) return;
-    
-    float z_axis[3] = {0.0, 0.0, 1.0};
-    float vector[3] = {dx, dy, dz};
-    vector[0] /= length;
-    vector[1] /= length;
-    vector[2] /= length;
-    
-    float axis[3];
-    axis[0] = z_axis[1] * vector[2] - z_axis[2] * vector[1];
-    axis[1] = z_axis[2] * vector[0] - z_axis[0] * vector[2];
-    axis[2] = z_axis[0] * vector[1] - z_axis[1] * vector[0];
-    
-    float dot_product = z_axis[0]*vector[0] + z_axis[1]*vector[1] + z_axis[2]*vector[2];
-    float angle = acos(dot_product) * 180.0 / M_PI;
-    
-    if (dot_product < -0.99999) {
-        axis[0] = 1.0;
-        axis[1] = 0.0;
-        axis[2] = 0.0;
-        angle = 180.0;
-    }
-    
-    glPushMatrix();
-    glTranslatef(x1, y1, z1);
-    glRotatef(angle, axis[0], axis[1], axis[2]);
-    GLUquadric* quad = gluNewQuadric();
-    gluCylinder(quad, radius, radius, length, 16, 16);
-    gluDeleteQuadric(quad);
-    glPopMatrix();
-}
+// --- Funções de Renderização da Cena ---
 
-void drawWoodenBase() {
-    glColor3f(0.5f, 0.35f, 0.05f);
+// void drawSky() {
+//     glDisable(GL_LIGHTING);
+//     glDisable(GL_DEPTH_TEST);
     
-    drawCylinder(slingshot.baseX, slingshot.baseY, slingshot.baseZ,
-                 slingshot.leftArmX, slingshot.leftArmY, slingshot.leftArmZ,
-                 0.3);
+//     glMatrixMode(GL_PROJECTION);
+//     glPushMatrix();
+//     glLoadIdentity();
+//     glOrtho(0, 1, 0, 1, -1, 1);
     
-    drawCylinder(slingshot.leftArmX, slingshot.leftArmY, slingshot.leftArmZ,
-                 slingshot.leftTopX, slingshot.leftTopY, slingshot.leftTopZ,
-                 0.2);
+//     glMatrixMode(GL_MODELVIEW);
+//     glPushMatrix();
+//     glLoadIdentity();
     
-    drawCylinder(slingshot.rightArmX, slingshot.rightArmY, slingshot.rightArmZ,
-                 slingshot.rightTopX, slingshot.rightTopY, slingshot.rightTopZ,
-                 0.2);
-}
-
-void drawElastic() {
-    glColor3f(0.05f, 0.05f, 0.05f);
-    glLineWidth(12.0f);
-    glBegin(GL_LINES);
-    glVertex3f(slingshot.leftTopX, slingshot.leftTopY, slingshot.leftTopZ);
-    glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
-    glVertex3f(slingshot.rightTopX, slingshot.rightTopY, slingshot.rightTopZ);
-    glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
-    glEnd();
-}
-
+//     // (Código do céu, nuvens, sol, montanhas - sem alterações)
+//     glBegin(GL_QUADS);
+//     glColor3f(0.4f, 0.6f, 0.9f);
+//     glVertex2f(0, 1);
+//     glVertex2f(1, 1);
+//     glColor3f(0.7f, 0.85f, 0.95f);
+//     glVertex2f(1, 0.3f);
+//     glVertex2f(0, 0.3f);
+//     glEnd();
+    
+//     glColor3f(1.0f, 0.95f, 0.7f);
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.8f, 0.8f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.8f + cos(angle) * 0.08f, 0.8f + sin(angle) * 0.08f);
+//     }
+//     glEnd();
+    
+//     glColor4f(1.0f, 1.0f, 1.0f, 0.7f);
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.2f, 0.85f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.2f + cos(angle) * 0.06f, 0.85f + sin(angle) * 0.03f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.25f, 0.87f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.25f + cos(angle) * 0.05f, 0.87f + sin(angle) * 0.025f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.55f, 0.9f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.55f + cos(angle) * 0.07f, 0.9f + sin(angle) * 0.035f);
+//     }
+//     glEnd();
+    
+//     glBegin(GL_TRIANGLE_FAN);
+//     glVertex2f(0.6f, 0.88f);
+//     for (int i = 0; i <= 20; i++) {
+//         float angle = (float)i / 20.0f * 2.0f * M_PI;
+//         glVertex2f(0.6f + cos(angle) * 0.05f, 0.88f + sin(angle) * 0.025f);
+//     }
+//     glEnd();
+    
+//     glColor3f(0.5f, 0.6f, 0.7f);
+//     glBegin(GL_TRIANGLES);
+//     glVertex2f(0.0f, 0.3f);
+//     glVertex2f(0.2f, 0.55f);
+//     glVertex2f(0.4f, 0.3f);
+    
+//     glVertex2f(0.3f, 0.3f);
+//     glVertex2f(0.5f, 0.6f);
+//     glVertex2f(0.7f, 0.3f);
+    
+//     glVertex2f(0.6f, 0.3f);
+//     glVertex2f(0.85f, 0.5f);
+//     glVertex2f(1.0f, 0.3f);
+//     glEnd();
+    
+//     glPopMatrix();
+//     glMatrixMode(GL_PROJECTION);
+//     glPopMatrix();
+//     glMatrixMode(GL_MODELVIEW);
+    
+//     glEnable(GL_DEPTH_TEST);
+//     glEnable(GL_LIGHTING);
+// }
 void drawSky() {
     glDisable(GL_LIGHTING);
-    glDisable(GL_DEPTH_TEST);
-    
+    glDisable(GL_DEPTH_TEST); // O céu não deve testar profundidade
+    glDepthMask(GL_FALSE);    // O céu não deve ESCREVER na profundidade
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, g_skyTextureID);
+
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0, 1, 0, 1, -1, 1);
-    
+    // Aumenta a área de visualização verticalmente para "dar zoom out" no céu
+    // Aumente o segundo parâmetro (top) para ver mais céu.
+    glOrtho(0, 1, 0, 1.2, -1, 1); // Exemplo: 0 a 1.5 no Y para "zoom out"
+                                  // Se 1.5 for demais, tente 1.2 ou 1.3
+
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
-    
+
+    glColor3f(1.0f, 1.0f, 1.0f); // Cor branca (para não manchar a textura)
+
     glBegin(GL_QUADS);
-    glColor3f(0.4f, 0.6f, 0.9f);
-    glVertex2f(0, 1);
-    glVertex2f(1, 1);
-    glColor3f(0.7f, 0.85f, 0.95f);
-    glVertex2f(1, 0.3f);
-    glVertex2f(0, 0.3f);
+        // Canto inferior esquerdo (onde o chão encontra o céu)
+        glTexCoord2f(0, 0); glVertex2f(0, 0); 
+        // Canto inferior direito
+        glTexCoord2f(1, 0); glVertex2f(1, 0); 
+        // Canto superior direito
+        // Ajuste o glTexCoord2f(..., Y_TEXTURA_MAX) para puxar mais céu para baixo
+        // Se a imagem tiver mais céu na parte de cima que você quer mostrar:
+        glTexCoord2f(1, 1); glVertex2f(1, 1.5); // O 1.5 aqui corresponde ao glOrtho
+        // Canto superior esquerdo
+        glTexCoord2f(0, 1); glVertex2f(0, 1.5); // O 1.5 aqui corresponde ao glOrtho
     glEnd();
-    
-    glColor3f(1.0f, 0.95f, 0.7f);
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.8f, 0.8f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.8f + cos(angle) * 0.08f, 0.8f + sin(angle) * 0.08f);
-    }
-    glEnd();
-    
-    glColor4f(1.0f, 1.0f, 1.0f, 0.7f);
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.2f, 0.85f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.2f + cos(angle) * 0.06f, 0.85f + sin(angle) * 0.03f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.25f, 0.87f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.25f + cos(angle) * 0.05f, 0.87f + sin(angle) * 0.025f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.55f, 0.9f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.55f + cos(angle) * 0.07f, 0.9f + sin(angle) * 0.035f);
-    }
-    glEnd();
-    
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(0.6f, 0.88f);
-    for (int i = 0; i <= 20; i++) {
-        float angle = (float)i / 20.0f * 2.0f * M_PI;
-        glVertex2f(0.6f + cos(angle) * 0.05f, 0.88f + sin(angle) * 0.025f);
-    }
-    glEnd();
-    
-    glColor3f(0.5f, 0.6f, 0.7f);
-    glBegin(GL_TRIANGLES);
-    glVertex2f(0.0f, 0.3f);
-    glVertex2f(0.2f, 0.55f);
-    glVertex2f(0.4f, 0.3f);
-    
-    glVertex2f(0.3f, 0.3f);
-    glVertex2f(0.5f, 0.6f);
-    glVertex2f(0.7f, 0.3f);
-    
-    glVertex2f(0.6f, 0.3f);
-    glVertex2f(0.85f, 0.5f);
-    glVertex2f(1.0f, 0.3f);
-    glEnd();
-    
+
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
-    
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_LIGHTING);
+
+    glDisable(GL_TEXTURE_2D);
+    glDepthMask(GL_TRUE); // Habilita a escrita na profundidade novamente
+    glEnable(GL_DEPTH_TEST); // Habilita o teste de profundidade novamente
 }
 
 void drawGround() {
@@ -424,80 +540,6 @@ void drawGround() {
     glEnable(GL_LIGHTING);
 }
 
-bool isTargetInAimLine(btRigidBody* target) {
-    if (!slingshot.isPulling || !red || !red->getRigidBody()) return false;
-    
-    float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-    float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-    float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-    
-    float dirX = restX - slingshot.pouchX;
-    float dirY = restY - slingshot.pouchY;
-    float dirZ = restZ - slingshot.pouchZ;
-    
-    float length = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
-    if (length < 0.01f) return false;
-    
-    dirX /= length;
-    dirY /= length;
-    dirZ /= length;
-    
-    btTransform trans;
-    target->getMotionState()->getWorldTransform(trans);
-    btVector3 targetPos = trans.getOrigin();
-    
-    float toTargetX = targetPos.x() - slingshot.pouchX;
-    float toTargetY = targetPos.y() - slingshot.pouchY;
-    float toTargetZ = targetPos.z() - slingshot.pouchZ;
-    
-    float targetDist = sqrt(toTargetX*toTargetX + toTargetY*toTargetY + toTargetZ*toTargetZ);
-    if (targetDist < 0.01f) return false;
-    
-    toTargetX /= targetDist;
-    toTargetY /= targetDist;
-    toTargetZ /= targetDist;
-    
-    float dot = dirX * toTargetX + dirY * toTargetY + dirZ * toTargetZ;
-    
-    return dot > 0.95f;
-}
-
-void drawAimLine() {
-    if (slingshot.isPulling && red && red->getRigidBody()) {
-        glDisable(GL_LIGHTING);
-        
-        float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-        float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-        float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-        
-        float dirX = restX - slingshot.pouchX;
-        float dirY = restY - slingshot.pouchY;
-        float dirZ = restZ - slingshot.pouchZ;
-        
-        float length = sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ);
-        if (length > 0.01f) {
-            dirX /= length;
-            dirY /= length;
-            dirZ /= length;
-            
-            glColor4f(1.0f, 1.0f, 0.0f, 0.8f);
-            glLineWidth(3.0f);
-            glEnable(GL_LINE_STIPPLE);
-            glLineStipple(3, 0xAAAA);
-            
-            glBegin(GL_LINES);
-            glVertex3f(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ);
-            glVertex3f(slingshot.pouchX + dirX * 15.0f, 
-                      slingshot.pouchY + dirY * 15.0f, 
-                      slingshot.pouchZ + dirZ * 15.0f);
-            glEnd();
-            
-            glDisable(GL_LINE_STIPPLE);
-        }
-        
-        glEnable(GL_LIGHTING);
-    }
-}
 
 void drawHUD() {
     glDisable(GL_LIGHTING);
@@ -544,7 +586,8 @@ void drawHUD() {
     
     glRasterPos2f(20, HEIGHT - 110);
     char depthText[50];
-    sprintf(depthText, "Profundidade: %.1f", pullDepth);
+    // CORRIGIDO: Usa texto estático, já que 'pullDepth' não é mais global.
+    sprintf(depthText, "Profundidade: (pressione Q/E)"); 
     for (char* c = depthText; *c != '\0'; c++) {
         glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
@@ -589,237 +632,50 @@ void drawHUD() {
     glEnable(GL_LIGHTING);
 }
 
-void updateElasticPhysics() {
-    if (!slingshot.isPulling && red && red->getRigidBody()) {
-        float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-        float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-        float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-        
-        float dx = slingshot.pouchX - restX;
-        float dy = slingshot.pouchY - restY;
-        float dz = slingshot.pouchZ - restZ;
-        
-        float k = 25.0f;
-        static float vx = 0.0f, vy = 0.0f, vz = 0.0f;
-        float damping = 0.88f;
-        
-        float fx = -k * dx;
-        float fy = -k * dy;
-        float fz = -k * dz;
-        
-        float mass = 0.08f;
-        float ax = fx / mass;
-        float ay = fy / mass;
-        float az = fz / mass;
-        
-        float dt = 0.016f;
-        vx += ax * dt;
-        vy += ay * dt;
-        vz += az * dt;
-        
-        vx *= damping;
-        vy *= damping;
-        vz *= damping;
-        
-        slingshot.pouchX += vx * dt;
-        slingshot.pouchY += vy * dt;
-        slingshot.pouchZ += vz * dt;
-        
-        float distance = sqrt(dx*dx + dy*dy + dz*dz);
-        if (distance < 0.05f && sqrt(vx*vx + vy*vy + vz*vz) < 0.3f) {
-            slingshot.pouchX = restX;
-            slingshot.pouchY = restY;
-            slingshot.pouchZ = restZ;
-            vx = vy = vz = 0.0f;
-        }
-    }
-}
 
-void updatePouchPosition() {
-    if (mousePressed && slingshot.isPulling) {
-        int deltaX_pixels = mouseX - startMouseX;
-        int deltaY_pixels = mouseY - startMouseY;
-        
-        float sensitivityX = 0.04f;
-        float sensitivityY = 0.04f;
-        
-        float dx = (float)deltaX_pixels * sensitivityX;
-        float dy = (float)-deltaY_pixels * sensitivityY;
-        float dz = pullDepth;
-        
-        float maxPull = 7.0f;
-        float currentDist = sqrt(dx*dx + dy*dy + dz*dz);
-        
-        if (currentDist > maxPull) {
-            dx = (dx / currentDist) * maxPull;
-            dy = (dy / currentDist) * maxPull;
-            dz = (dz / currentDist) * maxPull;
-        }
-        
-        slingshot.pouchX = startPouchX + dx;
-        slingshot.pouchY = startPouchY + dy;
-        slingshot.pouchZ = startPouchZ + dz;
-        
-        if (red->getRigidBody()) {
-            btTransform trans;
-            red->getRigidBody()->getMotionState()->getWorldTransform(trans);
-            trans.setOrigin(btVector3(slingshot.pouchX, slingshot.pouchY, slingshot.pouchZ));
-            red->getRigidBody()->getMotionState()->setWorldTransform(trans);
-            red->getRigidBody()->setWorldTransform(trans);
-        }
-    }
-}
-
-void screenToWorld(int screenX, int screenY, float depth, float& worldX, float& worldY, float& worldZ) {
-    GLint viewport[4];
-    GLdouble modelview[16];
-    GLdouble projection[16];
-    GLdouble posX, posY, posZ;
-    
-    glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-    glGetDoublev(GL_PROJECTION_MATRIX, projection);
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    
-    GLfloat winX = (float)screenX;
-    GLfloat winY = (float)viewport[3] - (float)screenY;
-    
-    gluUnProject(winX, winY, depth, modelview, projection, viewport, &posX, &posY, &posZ);
-    
-    worldX = posX;
-    worldY = posY;
-    worldZ = posZ;
-}
+// --- Callbacks do GLUT ---
 
 void mouse(int button, int state, int x, int y) {
-    if (gameOver) return;
-    
-    if (button == GLUT_LEFT_BUTTON) {
-        if (state == GLUT_DOWN) {
-            float wx, wy, wz;
-            bool found = false;
-            
-            float currentPouchX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-            float currentPouchY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-            float currentPouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-            
-            GLdouble modelview[16];
-            GLdouble projection[16];
-            GLint viewport[4];
-            GLdouble screenX, screenY, screenZ;
-            
-            glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-            glGetDoublev(GL_PROJECTION_MATRIX, projection);
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            
-            gluProject(currentPouchX, currentPouchY, currentPouchZ,
-                      modelview, projection, viewport,
-                      &screenX, &screenY, &screenZ);
-            
-            screenToWorld(x, y, (float)screenZ, wx, wy, wz);
-            
-            float dist_x = fabs(wx - currentPouchX);
-            float dist_y = fabs(wy - currentPouchY);
-            
-            if (dist_x < 1.5f && dist_y < 1.0f) {
-                found = true;
-            }
-            
-            if (found && shotsRemaining > 0) {
-                printf("Estilingue capturado! Arraste e use Q/E para profundidade.\n");
-                mousePressed = true;
-                slingshot.isPulling = true;
-                createProjectileInPouch();
-                startMouseX = x;
-                startMouseY = y;
-                startPouchX = slingshot.pouchX;
-                startPouchY = slingshot.pouchY;
-                startPouchZ = slingshot.pouchZ;
-                pullDepth = 0.0f;
-            }
-            
-        } else {
-            if (mousePressed && slingshot.isPulling && red && red->getRigidBody()) {
-                printf("Lancando projetil!\n");
-                
-                float restX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-                float restY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-                float restZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-                
-                float impulseX = restX - slingshot.pouchX;
-                float impulseY = restY - slingshot.pouchY;
-                float impulseZ = restZ - slingshot.pouchZ;
-                
-                red->getRigidBody()->setCollisionFlags(red->getRigidBody()->getCollisionFlags() & ~btCollisionObject::CF_KINEMATIC_OBJECT);
-                red->getRigidBody()->forceActivationState(ACTIVE_TAG);
-                
-                red->getRigidBody()->setRestitution(0.6f);
-                red->getRigidBody()->setFriction(0.5f);
-                red->getRigidBody()->setRollingFriction(0.1f);
-                red->getRigidBody()->setDamping(0.05f, 0.1f);
-                
-                red->getRigidBody()->setLinearVelocity(btVector3(0,0,0));
-                red->getRigidBody()->setAngularVelocity(btVector3(0,0,0));
-                
-                float forceMagnitude = 20.0f;
-                btVector3 impulse(impulseX * forceMagnitude, impulseY * forceMagnitude, impulseZ * forceMagnitude);
-                red->getRigidBody()->applyCentralImpulse(impulse);
-                
-                // projectileBody = nullptr; // Não é mais necessário
-                shotsRemaining--;
-                
-                if (shotsRemaining <= 0) {
-                    gameOver = true;
-                }
-            }
-            
-            mousePressed = false;
-            slingshot.isPulling = false;
-            pullDepth = 0.0f;
-        }
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handleMouseClick(button, state, x, y);
     }
 }
 
 void mouseMotion(int x, int y) {
-    mouseX = x;
-    mouseY = y;
-    updatePouchPosition();
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handleMouseDrag(x, y);
+    }
 }
 
 void passiveMouseMotion(int x, int y) {
-    mouseX = x;
-    mouseY = y;
+    // Delega o evento para o gerenciador
+    if (g_slingshotManager) {
+        g_slingshotManager->handlePassiveMouseMotion(x, y);
+    }
 }
 
 void keyboard(unsigned char key, int x, int y) {
+    // Primeiro, delega as teclas do estilingue (Q/E)
+    if (g_slingshotManager) {
+        g_slingshotManager->handleKeyboard(key);
+    }
+
+    // Teclas globais do jogo
     switch(key) {
-        case 27:
+        case 27: // ESC
             exit(0);
-            break;
-            
-        case 'q':
-        case 'Q':
-            if (slingshot.isPulling) {
-                pullDepth += 0.3f;
-                if (pullDepth > 6.0f) pullDepth = 6.0f;
-                updatePouchPosition();
-            }
-            break;
-            
-        case 'e':
-        case 'E':
-            if (slingshot.isPulling) {
-                pullDepth -= 0.3f;
-                if (pullDepth < 0.0f) pullDepth = 0.0f;
-                updatePouchPosition();
-            }
             break;
             
         case 'r':
         case 'R':
+            // Lógica de reset global
             score = 0;
             shotsRemaining = 8;
             gameOver = false;
             
+            // Limpa os corpos dinâmicos (caixas, pássaros)
             for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
                 btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
                 btRigidBody* body = btRigidBody::upcast(obj);
@@ -831,22 +687,34 @@ void keyboard(unsigned char key, int x, int y) {
                 }
             }
             
-            initBullet();
+            // Recria o mundo, caixas e árvores
+            initBullet(); 
             
-            clearProjectile();
-            slingshot.pouchX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-            slingshot.pouchY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-            slingshot.pouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-            slingshot.isPulling = false;
-            mousePressed = false;
-            pullDepth = 0.0f;
+            // Limpa e recria os porcos (já feito dentro de initBullet)
+            for (auto& porco : porcos) {
+                // A recriação já é feita em initBullet, aqui apenas garantimos que o ponteiro é válido
+                // Se a lógica mudar, a recriação seria aqui.
+            }
             
+            // Reseta o estado do estilingue
+            if (g_slingshotManager) {
+                g_slingshotManager->reset();
+            }
+            
+            // Recria o pássaro 'red' (seu ponteiro foi limpo em clearProjectile)
+            // A inicialização em initBullet já limpa o 'red'
+            // Mas o 'red' em si precisa ser resetado
+            if(red) {
+                 red->resetar(0,0,0); // Posição inicial
+            }
+
             printf("Jogo reiniciado!\n");
             break;
     }
 }
 
 void specialKeys(int key, int x, int y) {
+    // Controles da câmera permanecem globais
     switch(key) {
         case GLUT_KEY_LEFT:
             cameraAngleH -= 3.0f;
@@ -873,6 +741,8 @@ void specialKeys(int key, int x, int y) {
     }
 }
 
+// --- Funções Principais (Display, Timer, Init) ---
+
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
@@ -880,6 +750,7 @@ void display() {
     
     glLoadIdentity();
     
+    // Configuração da Câmera
     float angleH_rad = cameraAngleH * M_PI / 180.0f;
     float angleV_rad = cameraAngleV * M_PI / 180.0f;
     
@@ -891,18 +762,27 @@ void display() {
               0.0f, cameraTargetY, -8.0f,
               0.0f, 1.0f, 0.0f);
     
-    glEnable(GL_LIGHTING);
+    // Configuração da Luz
+glEnable(GL_LIGHTING); //
     glEnable(GL_LIGHT0);
     
     GLfloat lightPos[] = {10.0f, 15.0f, 10.0f, 1.0f};
-    GLfloat lightAmb[] = {0.4f, 0.4f, 0.4f, 1.0f};
-    GLfloat lightDif[] = {1.0f, 1.0f, 0.9f, 1.0f};
-    GLfloat lightSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
+    
+    // MUDE ISTO (Deixa as sombras mais claras):
+    // DE: GLfloat lightAmb[] = {0.4f, 0.4f, 0.4f, 1.0f};
+    GLfloat lightAmb[] = {0.8f, 0.8f, 0.8f, 1.0f};
+
+    // MUDE ISTO (Mantém a luz principal clara):
+    // DE: GLfloat lightDif[] = {1.0f, 1.0f, 0.9f, 1.0f};
+    GLfloat lightDif[] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // MUDE ISTO (Remove o brilho "realista"):
+    // DE: GLfloat lightSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
+    GLfloat lightSpec[] = {0.0f, 0.0f, 0.0f, 1.0f};
     
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmb);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDif);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpec);
+    // --- Renderização da Cena ---
     
     drawGround();
     
@@ -910,29 +790,42 @@ void display() {
         tree.draw();
     }
     
-    drawWoodenBase();
-    
-    glDisable(GL_LIGHTING);
-    drawElastic();
-    drawAimLine();
-    glEnable(GL_LIGHTING);
-    
-    // Desenhar o pássaro Red separadamente (ele gerencia sua própria transformação)
-    if (red && red->getRigidBody()) {
-        glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
-        red->desenhar();
-        red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
-        // A rotação visual de 180° em Y já está configurada por padrão no construtor
-        // Se quiser mudar: red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
+    // Desenha o estilingue (madeira e elásticos)
+    if (g_slingshotManager) {
+        g_slingshotManager->draw();
     }
     
-    // Desenhar outros objetos físicos (caixas, alvos)
+    // Desenha o pássaro 'red'
+    // O 'red->desenhar()' usa a matriz do seu 'btRigidBody'
+    if (red && red->getRigidBody()) {
+        glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
+        red->desenhar(); // A classe Passaro cuida da sua própria matriz
+        // Rotação visual padrão (opcional, se 'passaro.cpp' não fizer)
+        // red->setRotacaoVisual(0.0f, 1.0f, 0.0f, M_PI);
+    }
+    
+    //desenha os blocos
+    //corrigi o bug da hitbox invisivel 
+    for (auto& bloco : blocos) {
+        glPushMatrix();
+        // glTranslatef(0.0f, -2.5f, 0.0f);
+        bloco->desenhar();
+        glPopMatrix();
+    }
+
+    // Desenha os porcos
+    for (auto& porco : porcos) {
+        porco->desenhar();
+    }
+
+    // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
         
         if (body && body->getMotionState() && body->getInvMass() != 0) {
-            // Pular o Red pois já foi desenhado acima
+            
+            // Pula o 'red', pois ele já foi desenhado acima
             if (red && body == red->getRigidBody()) {
                 continue;
             }
@@ -947,29 +840,38 @@ void display() {
             
             btCollisionShape* shape = body->getCollisionShape();
             
+            // CORREÇÃO: Mudado de 'else if' para 'if'
+            // Desenha apenas as caixas-alvo
             if (shape == boxShape) {
                 glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
                 
-                if (isTargetInAimLine(body)) {
-                    glColor3f(0.2f, 1.0f, 0.2f);
+                // Verifica se o alvo está na mira
+                if (g_slingshotManager && g_slingshotManager->isTargetInAimLine(body)) {
+                    glColor3f(0.2f, 1.0f, 0.2f); // Verde
                 } else {
-                    glColor3f(0.6f, 0.4f, 0.2f);
+                    glColor3f(0.6f, 0.4f, 0.2f); // Madeira
                 }
                 
-                glutSolidCube(1.0);
+                if (blockModelLoaded) {
+                    // Se o modelo carregou, desenha o .obj
+                    glScalef(5.0, 5.0, 5.0);
+                    blockModel.draw();
+                } else {
+                    // Senão, desenha o cubo antigo como fallback
+                    glutSolidCube(1.0);
+                }
                 
-                glDisable(GL_LIGHTING);
-                glColor3f(0.3f, 0.2f, 0.1f);
-                glLineWidth(2.0f);
-                
-                glBegin(GL_LINES);
-                glVertex3f(-0.5f, 0.0f, -0.5f);
-                glVertex3f(0.5f, 0.0f, -0.5f);
-                glVertex3f(-0.5f, 0.0f, 0.5f);
-                glVertex3f(0.5f, 0.0f, 0.5f);
-                glEnd();
-                
-                glEnable(GL_LIGHTING);
+                // (Contorno da caixa)
+                // glDisable(GL_LIGHTING);
+                // glColor3f(0.3f, 0.2f, 0.1f);
+                // glLineWidth(2.0f);
+                // glBegin(GL_LINES);
+                // glVertex3f(-0.5f, 0.0f, -0.5f);
+                // glVertex3f(0.5f, 0.0f, -0.5f);
+                // glVertex3f(-0.5f, 0.0f, 0.5f);
+                // glVertex3f(0.5f, 0.0f, 0.5f);
+                // glEnd();
+                // glEnable(GL_LIGHTING);
             }
             
             glPopMatrix();
@@ -977,16 +879,130 @@ void display() {
     }
     
     glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
+
+    g_particleManager.draw();
     
-    updateElasticPhysics();
     drawHUD();
     
     glutSwapBuffers();
 }
 
 void timer(int value) {
-    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10);
+
+    float deltaTime = 1.0f / 60.0f;
+
+    // Simula a física
+    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
     
+    for (auto& bloco : blocos) {
+        bloco->update(deltaTime);
+    }
+
+    g_particleManager.update(deltaTime);
+
+    //bloco adicionado para lidar com a colisao dos blocos
+    int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
+    for (int i = 0; i < numManifolds; i++) {
+        btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
+        const btCollisionObject* obA = contactManifold->getBody0();
+        const btCollisionObject* obB = contactManifold->getBody1();
+
+        // --- Lógica de Dano para Blocos e Porcos ---
+        void* userPointerA = obA->getUserPointer();
+        void* userPointerB = obB->getUserPointer();
+
+        // Tenta converter os ponteiros para Porco e Bloco
+        Porco* porco = nullptr;
+        if (userPointerA) porco = static_cast<Porco*>(userPointerA);
+        if (!porco && userPointerB) porco = static_cast<Porco*>(userPointerB);
+
+        BlocoDestrutivel* bloco = nullptr;
+        // (A lógica de encontrar o bloco permanece a mesma)
+        for (auto& b : blocos) {
+            if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
+                bloco = b;
+                break;
+            }
+        }
+        
+        bool passaroEnvolvido = (obA == red->getRigidBody() || obB == red->getRigidBody());
+
+        // Calcula o impulso total do contato (mantido para lógica de blocos/chão)
+        float impulsoTotal = 0;
+        for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+            impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+        }
+        float dano_impulso = impulsoTotal * 0.1f; // Fator de conversão de impulso para dano
+
+        // Se um porco está envolvido na colisão, determine a fonte
+
+        if (porco) {
+            // 1) Se o porco colidiu com o pássaro, calcule dano baseado na velocidade relativa
+            if (passaroEnvolvido) {
+                btRigidBody* rbA = btRigidBody::upcast((btCollisionObject*)obA);
+                btRigidBody* rbB = btRigidBody::upcast((btCollisionObject*)obB);
+                btVector3 velA(0,0,0), velB(0,0,0);
+                if (rbA) velA = rbA->getLinearVelocity();
+                if (rbB) velB = rbB->getLinearVelocity();
+
+                btVector3 rel = velA - velB;
+                float speed = rel.length();
+
+                // Converte velocidade relativa em dano. Fator ajustável.
+                float dano_vel = speed * 0.1f; // <--- ajuste este fator conforme necessário
+
+                if (dano_vel > 1.0f) {
+                    porco->tomarDano(dano_vel);
+                }
+            } else {
+                // 2) Para outras colisões (chão, blocos), use o método baseado em impulso
+                if (dano_impulso > 0.8f) {
+                    porco->tomarDano(dano_impulso);
+                }
+            }
+        }
+
+        // Se o pássaro colidiu com um bloco
+        if (bloco && passaroEnvolvido) {
+            if (dano_impulso > 0.5f) { 
+                bloco->aplicarDano(dano_impulso);
+            }
+        }
+        
+        bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
+
+        if (bloco && chaoEnvolvido) {
+            if (dano_impulso > 0.5f) {
+                bloco->aplicarDano(dano_impulso);
+            }
+        }
+    }
+
+    // 2. Limpa blocos e porcos destruídos
+    for (int i = blocos.size() - 1; i >= 0; i--) {
+        if (blocos[i]->isDestruido()) {
+            score += blocos[i]->getPontuacao(); // Adiciona pontuação
+            blocos[i]->limparFisica(dynamicsWorld);
+            delete blocos[i];
+            blocos.erase(blocos.begin() + i);
+        }
+    }
+
+    for (int i = porcos.size() - 1; i >= 0; i--) {
+        if (!porcos[i]->isAtivo()) {
+            score += 500; // Pontuação por derrotar um porco
+            // A física já é limpa dentro do método tomarDano
+            delete porcos[i];
+            porcos.erase(porcos.begin() + i);
+        }
+    }
+
+    // Atualiza a física do estilingue (ex: malha voltando)
+    if (g_slingshotManager) {
+        g_slingshotManager->update();
+    }
+    
+    // Lógica de pontuação (sem alterações)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
@@ -1025,7 +1041,9 @@ void reshape(int w, int h) {
 
 void init() {
     glEnable(GL_DEPTH_TEST);
+    glShadeModel(GL_FLAT);
     glEnable(GL_LINE_SMOOTH);
+    glDisable(GL_CULL_FACE);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1039,60 +1057,69 @@ void init() {
     glMaterialfv(GL_FRONT, GL_SPECULAR, spec);
     glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
     
-    slingshot.baseX = 0.0f;
-    slingshot.baseY = 0.0f;
-    slingshot.baseZ = 0.0f;
+
+    g_skyTextureID = loadGlobalTexture("Objetos/texturas/fundo_ceu_borrado.png"); 
+    if (g_skyTextureID == 0) {
+        printf("ERRO: Falha ao carregar a textura do ceu.\n");
+    }
+    // 1. Inicializa a física
+    initBullet();
     
-    slingshot.leftArmX = 0.0f;
-    slingshot.leftArmY = 3.0f;
-    slingshot.leftArmZ = 0.0f;
+    //carrega as texturas dos blocos
+            for (auto& bloco : blocos) {
+                bloco->carregarTexturas();
+            }
+
+    // 2. Cria a instância do gerenciador do estilingue
+    //    (O ponteiro 'red' já foi criado na 'main')
+    g_slingshotManager = new SlingshotManager(dynamicsWorld, red, &shotsRemaining, &gameOver);
     
-    slingshot.rightArmX = 0.0f;
-    slingshot.rightArmY = 3.0f;
-    slingshot.rightArmZ = 0.0f;
+    // 3. REMOVIDO: Bloco de inicialização da 'struct slingshot'
     
-    float armHeight = 2.5f;
-    float angle = 30.0f * M_PI / 180.0f;
-    
-    slingshot.leftTopX = slingshot.leftArmX + sin(angle) * armHeight;
-    slingshot.leftTopY = slingshot.leftArmY + cos(angle) * armHeight;
-    slingshot.leftTopZ = slingshot.leftArmZ;
-    
-    slingshot.rightTopX = slingshot.rightArmX - sin(angle) * armHeight;
-    slingshot.rightTopY = slingshot.rightArmY + cos(angle) * armHeight;
-    slingshot.rightTopZ = slingshot.rightArmZ;
-    
-    slingshot.pouchX = (slingshot.leftTopX + slingshot.rightTopX) / 2.0f;
-    slingshot.pouchY = (slingshot.leftTopY + slingshot.rightTopY) / 2.0f;
-    slingshot.pouchZ = (slingshot.leftTopZ + slingshot.rightTopZ) / 2.0f;
-    slingshot.isPulling = false;
-    
-    initBullet();    
-    // Carregar modelo da Ã¡rvore
+    // 4. Carregar modelo da árvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
-    
     const char* possiblePaths[] = {
         "Objetos/arvore2.obj",
         "./Objetos/arvore2.obj",
         "../Objetos/arvore2.obj",
         "arvore2.obj",
-        "tree2.obj"
+        "tree3.obj"
     };
-    
     treeModelLoaded = false;
     for (const char* path : possiblePaths) {
         printf("  Tentando: %s\n", path);
         if (treeModel.loadFromFile(path)) {
             treeModelLoaded = true;
-            printf("  âœ“ Modelo carregado com sucesso de: %s\n", path);
+            printf("  ✓ Modelo carregado com sucesso de: %s\n", path);
             break;
         }
     }
-    
     if (!treeModelLoaded) {
-        printf("  Modelo OBJ nao encontrado em nenhum caminho. Usando geometria procedural.\n");
+        printf("  Modelo OBJ nao encontrado. Usando geometria procedural.\n");
     }
     
+    //bloco do tipo barra
+    printf("\nTentando carregar modelo OBJ do bloco...\n");
+    const char* blockPaths[] = {
+        "Objetos/bloco.obj",
+        "./Objetos/bloco.obj",
+        "../Objetos/bloco.obj",
+        "bloco.obj"
+    };
+    blockModelLoaded = false;
+    for (const char* path : blockPaths) {
+        printf("  Tentando: %s\n", path);
+        if (blockModel.loadFromFile(path)) {
+            blockModelLoaded = true;
+            printf("  ✓ Modelo do bloco carregado de: %s\n", path);
+            break;
+        }
+    }
+    if (!blockModelLoaded) {
+        printf("  Aviso: Modelo OBJ do bloco nao encontrado. Usando cubo procedural.\n");
+    }
+
+    // (Impressão dos controles)
     printf("\n=== ESTILINGUE 3D MELHORADO ===\n");
     printf("CONTROLES:\n");
     printf("  Mouse Esquerdo: Clique e arraste para mirar\n");
@@ -1115,13 +1142,17 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(WIDTH, HEIGHT);
-    glutCreateWindow("Estilingue 3D - Melhorado com Red.obj");
+    glutCreateWindow("Estilingue 3D - Refatorado com Classe");
     
-    init();
+    // (init_audio)
     
-    // CRÍTICO: Criar o objeto red ANTES de usar!
+    // CRÍTICO: Criar o objeto 'red' ANTES de chamar init()
     red = new PassaroRed(0.0f, 0.0f, 0.0f);
     
+    // Agora 'init()' pode usar o ponteiro 'red'
+    init();
+    
+    // Configura os callbacks do GLUT
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouse);
@@ -1133,13 +1164,13 @@ int main(int argc, char** argv) {
     
     glutMainLoop();
     
-    // Limpeza
+    // --- Limpeza ---
     if (red) {
-        delete red;  // O destrutor de Passaro já limpa a física
+        delete red;  // O destrutor de Passaro deve limpar a física
         red = nullptr;
     }
     
-    // Limpa os target bodies
+    // Limpa os corpos e shapes do Bullet
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
@@ -1155,11 +1186,17 @@ int main(int argc, char** argv) {
         delete collisionShapes[i];
     }
     
+    // Limpa o gerenciador
+    delete g_slingshotManager;
+    
+    // Limpa o mundo Bullet
     delete dynamicsWorld;
     delete solver;
     delete dispatcher;
     delete collisionConfiguration;
     delete broadphase;
+
+    // (close_audio)
     
     return 0;
 }

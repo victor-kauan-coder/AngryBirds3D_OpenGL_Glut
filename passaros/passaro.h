@@ -9,6 +9,11 @@
 #include <btBulletDynamicsCommon.h>
 #include "../loads.h"
 
+#include <cmath> 
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 /**
  * Classe base Passaro - Representa um pássaro do Angry Birds
  * Todos os tipos específicos de pássaros herdarão desta classe
@@ -105,6 +110,7 @@ public:
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ) {
         mundoFisica = mundo;
         
+ 
         // Cria a forma de colisão (esfera)
         colisaoShape = new btSphereShape(raioColisao * escala);
         
@@ -133,7 +139,10 @@ public:
         
         // Cria o rigid body
         rigidBody = new btRigidBody(rbInfo);
-        
+        rigidBody->setCcdMotionThreshold(0.0001f);
+        rigidBody->setCcdSweptSphereRadius(raioColisao * escala);
+        rigidBody->setContactProcessingThreshold(0.0f);
+
         // Adiciona ao mundo de física
         mundoFisica->addRigidBody(rigidBody);
         

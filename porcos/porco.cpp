@@ -2,52 +2,170 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <cmath>
-#include "loads.h"
-#include "openGL_util.h"
+#include "../loads.h"
+#include "../openGL_util.h"
+#include "porco.h"
+#include <iostream>
 
-struct Porco {
-    float x, y, z;
-    float scale;
-    float rotation;
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-    Porco(float posX, float posY, float posZ, float s = 1.0f) 
-        : x(posX), y(posY), z(posZ), scale(s) {
-        rotation = (rand() % 360);
-    }
+Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial)
+    : rigidBody(nullptr),
+      colisaoShape(nullptr),
+      motionState(nullptr),
+      mundoFisica(nullptr),
+      escala(escalaInicial),
+      raioColisao(raio),
+      ativo(true),
+      vidaMaxima(100.0f),
+      vida(10.0f),
+      massa(2.0f),
+      tipo("Porco"),
+      restituicao(0.5f),
+      friccao(0.8f),
+      amortecimentoLinear(0.2f),
+      amortecimentoAngular(0.2f) {
 
-    void draw() {
-        glPushMatrix();
-        glTranslatef(x, y, z);
-        glRotatef(rotation, 0, 1, 0);
-        glScalef(scale, scale, scale);
-
-        // Desenhar o porco como uma esfera verde
-        glColor3f(0.0f, 1.0f, 0.0f);
-        glutSolidSphere(0.5f, 20, 20);
-
-        glPopMatrix();
-    }
-};
-
-void display(void){
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
-    glColor3f (0.0, 0.0, 0.0); 
-    Porco porco(0.0f, 0.0f, 0.0f);
-    porco.draw();
-    glutSwapBuffers(); 
 }
 
+Porco::~Porco() {
+    limparFisica();
+}
 
-int main(int argc, char** argv) {
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutCreateWindow("Porco");
-    init();
-    glEnable(GL_DEPTH_TEST);
-    glutDisplayFunc(display);
+void Porco::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ) {
+    mundoFisica = mundo;
 
-    Porco porco(0.0f, 0.0f, -5.0f);
+    // Porcos podem ser caixas ou esferas. Esfera é mais simples.
+    colisaoShape = new btSphereShape(raioColisao * escala * 0.3f);
 
-    glutMainLoop();
-    return 0;
+    btTransform transform;
+    transform.setIdentity();
+    transform.setOrigin(btVector3(posX, posY, posZ));
+
+    motionState = new btDefaultMotionState(transform);
+
+    btVector3 inerciaLocal(0, 0, 0);
+    if (massa > 0.0f) {
+        colisaoShape->calculateLocalInertia(massa, inerciaLocal);
+    }
+
+    btRigidBody::btRigidBodyConstructionInfo rbInfo(massa, motionState, colisaoShape, inerciaLocal);
+    rbInfo.m_restitution = restituicao;
+    rbInfo.m_friction = friccao;
+    rbInfo.m_linearDamping = amortecimentoLinear;
+    rbInfo.m_angularDamping = amortecimentoAngular;
+
+    rigidBody = new btRigidBody(rbInfo);
+    
+    // Adiciona um ponteiro para o objeto Porco no corpo rígido para fácil acesso durante colisões
+    rigidBody->setUserPointer(this);
+
+    mundoFisica->addRigidBody(rigidBody);
+    
+    // Força a ativação do corpo para que a gravidade seja aplicada imediatamente
+    rigidBody->activate(true);
+}
+
+void Porco::limparFisica() {
+    if (mundoFisica && rigidBody) {
+        mundoFisica->removeRigidBody(rigidBody);
+    }
+    delete rigidBody;
+    rigidBody = nullptr;
+    delete motionState;
+    motionState = nullptr;
+    delete colisaoShape;
+    colisaoShape = nullptr;
+}
+
+bool Porco::carregarModelo(const char* caminhoOBJ) {
+    return modelo.loadFromFile(caminhoOBJ);
+}
+
+bool Porco::carregarMTL(const char* caminhoMTL) {
+    return modelo.loadMTL(caminhoMTL);
+}
+
+void Porco::desenhar() {
+    if (!ativo || !rigidBody) return;
+
+    btTransform transform;
+    rigidBody->getMotionState()->getWorldTransform(transform);
+
+    float matriz[16];
+    transform.getOpenGLMatrix(matriz);
+
+    glPushMatrix();
+    glMultMatrixf(matriz);
+    glScalef(escala, escala, escala);
+    glRotatef(180.0f, 0.0f, 1.0f, 0.0f); // Ajuste de rotação se necessário
+
+    // Muda a cor com base na vida
+    float r = 1.0f - (vida / vidaMaxima);
+    float g = vida / vidaMaxima;
+    glColor3f(r, g, 0.0f);
+
+    if (!modelo.vertices.empty()) {
+        modelo.draw();
+    } else {
+        glutSolidSphere(raioColisao, 20, 20);
+    }
+
+    glPopMatrix();
+}
+
+void Porco::atualizar(float deltaTime) {
+    if (!ativo) return;
+    // Lógica adicional pode ser colocada aqui, como animações.
+}
+
+void Porco::tomarDano(float dano) {
+    if (!ativo) return;
+
+    vida -= dano;
+    std::cout << "Porco tomou " << dano << " de dano. Vida restante: " << vida << std::endl;
+
+    if (vida <= 0) {
+        std::cout << "Porco derrotado!" << std::endl;
+        vida = 0;
+        setAtivo(false);
+        
+        // Remove o corpo do mundo da física para que não interaja mais
+        if (mundoFisica && rigidBody) {
+            mundoFisica->removeRigidBody(rigidBody);
+        }
+    }
+}
+
+void Porco::resetar(float posX, float posY, float posZ) {
+    if (!rigidBody) return;
+
+    // Se o corpo foi removido, precisa ser adicionado de volta
+    if (!rigidBody->isInWorld()) {
+        mundoFisica->addRigidBody(rigidBody);
+    }
+
+    btTransform transform;
+    transform.setIdentity();
+    transform.setOrigin(btVector3(posX, posY, posZ));
+
+    rigidBody->setWorldTransform(transform);
+    rigidBody->getMotionState()->setWorldTransform(transform);
+
+    rigidBody->setLinearVelocity(btVector3(0, 0, 0));
+    rigidBody->setAngularVelocity(btVector3(0, 0, 0));
+    rigidBody->clearForces();
+    rigidBody->setActivationState(ISLAND_SLEEPING);
+
+    vida = vidaMaxima;
+    setAtivo(true);
+}
+
+btVector3 Porco::getPosicao() const {
+    if (!rigidBody) return btVector3(0, 0, 0);
+    btTransform transform;
+    rigidBody->getMotionState()->getWorldTransform(transform);
+    return transform.getOrigin();
 }
