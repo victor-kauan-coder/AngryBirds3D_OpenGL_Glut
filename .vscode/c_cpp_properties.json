@@ -3,10 +3,7 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:\\msys64\\mingw64\\include\\bullet\\BulletDynamics",
-                "C:/msys64/mingw64/include",
-                "C:/msys64/mingw64/include/bullet/BulletInverseDynamics",
-                "C:/msys64/mingw64/include/bullet"
+                "C:\\msys64\\mingw64\\include\\bullet\\BulletDynamics"
             ],
             "defines": [
                 "_DEBUG",
@@ -16,31 +13,8 @@
             "windowsSdkVersion": "10.0.22621.0",
             "compilerPath": "cl.exe",
             "cStandard": "c17",
-            "cppStandard": "c++23",
-            "intelliSenseMode": "windows-msvc-x64"
-        },
-        {
-            "name": "cg",
-            "includePath": [
-                "C:/Users/davi5/source/repos/AngryBirds3D_OpenGL_Glut/**",
-                "C:/Users/davi5/vcpkg/installed/x64-windows/include",
-                "C:/Users/davi5/source/repos/AngryBirds3D_OpenGL_Glut/**"
-            ],
-            "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "windowsSdkVersion": "10.0.26100.0",
-            "cStandard": "c17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64",
-            "mergeConfigurations": false,
-            "recursiveIncludes": {},
-            "compilerPath": "C:/msys64/mingw64/bin/g++.exe",
-            "browse": {
-                "limitSymbolsToIncludedHeaders": true
-            }
+            "intelliSenseMode": "windows-msvc-x64"
         }
     ],
     "version": 4
