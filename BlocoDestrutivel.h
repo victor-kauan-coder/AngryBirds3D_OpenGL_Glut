@@ -1,5 +1,4 @@
-#ifndef BLOCO_DESTRUTIVEL_H
-#define BLOCO_DESTRUTIVEL_H
+#pragma once
 
 #include <string>
 #include <map>
