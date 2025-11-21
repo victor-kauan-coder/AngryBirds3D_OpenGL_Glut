@@ -295,16 +295,39 @@ struct OBJModel {
 
             if (prefix == "mtllib") {
                 // Carrega o arquivo de material
-                iss >> mtlFilename;
+                iss >> mtlFilename; // mtlFilename é uma string membro da classe OBJModel
                 printf("Arquivo MTL referenciado: %s\n", mtlFilename.c_str());
-               // --- CORRIGIDO: Caminhos relativos ao OBJ ---
-                // Substitua o bloco mtlPaths[] antigo por este
+
+                // --- CORREÇÃO AQUI: Crie as strings completas e mantenha-as vivas ---
+                std::string fullPath1 = objDir + mtlFilename; // Agora é uma string completa
+                std::string fullPath2 = mtlFilename;          // Outra string completa
+                // Se precisar de mais caminhos, crie mais std::string aqui
+
+                // O array agora armazena ponteiros para strings que
+                // GARANTIDAMENTE existem durante o loop 'for'.
                 const char* mtlPaths[] = {
-                    (objDir + mtlFilename).c_str(), // Tenta carregar (ex: "Objetos/arvore2.mtl")
-                    mtlFilename.c_str()             // Fallback: (ex: "arvore2.mtl")
+                    fullPath1.c_str(), // Ponteiro para a memória de fullPath1
+                    fullPath2.c_str(), // Ponteiro para a memória de fullPath2
+                    // Adicione mais se necessário, ex: "Objetos/texturas/" + mtlFilename
+                    // E certifique-se que o loop for vá até 2 (se só tem 2 caminhos)
+                    // Ou adicione mais strings para os outros caminhos que você tinha:
+                    // std::string path3_full = std::string("Objetos/") + mtlFilename;
+                    // std::string path4_full = std::string("../Objetos/") + mtlFilename;
+                    // path3_full.c_str(),
+                    // path4_full.c_str()
                 };
-                for (int i = 0; i < 4; i++) {
-                    if (loadMTL(mtlPaths[i])) break; // Carrega e para no primeiro sucesso
+                
+                // AJUSTE O TAMANHO DO LOOP PARA O NÚMERO DE CAMINHOS REAIS QUE VOCÊ TEM
+                int numMtlPaths = sizeof(mtlPaths) / sizeof(mtlPaths[0]); // Calcula automaticamente
+                bool mtlLoaded = false;
+                for (int i = 0; i < numMtlPaths; i++) {
+                    if (loadMTL(mtlPaths[i])) { // Chama nossa função
+                        mtlLoaded = true;
+                        break; // Carrega e para no primeiro sucesso
+                    }
+                }
+                if (!mtlLoaded) {
+                     printf("Aviso: Nao foi possivel carregar NENHUM arquivo MTL para %s\n", mtlFilename.c_str());
                 }
             }
             else if (prefix == "usemtl") {
