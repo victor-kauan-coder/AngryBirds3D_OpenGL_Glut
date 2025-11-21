@@ -1,8 +1,10 @@
-
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 //Limpa a tela com a cor branca;
-void init(void){
-    glClearColor(1.0, 1.0, 1.0, 1.0); 
-}
+// void init(void){
+//     glClearColor(1.0, 1.0, 1.0, 1.0); 
+// }
 
 void setupCamera(float cameraDistance = 5.0f, float cameraAngleX = 20.0f, float cameraAngleY = 30.0f) {
     // Configura a projeção em perspectiva
