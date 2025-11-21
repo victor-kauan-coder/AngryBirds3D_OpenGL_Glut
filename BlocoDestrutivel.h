@@ -12,19 +12,16 @@
 // Exatamente como em passaro.h
 #include "loads.h"
 #include "ParticleManager.h"
+#include "audio_manager.h"
 #include "stb_image.h"
-
+#include "enums.h"
 // --- ENUMS para facilitar a configuração ---
 
 /**
  * @enum MaterialTipo
  * @brief Define as propriedades físicas e de jogo do bloco.
  */
-enum class MaterialTipo {
-    MADEIRA,
-    PEDRA,
-    GELO
-};
+
 
 /**
  * @enum EstadoDano
@@ -38,6 +35,8 @@ enum class EstadoDano {
 };
 
 extern ParticleManager g_particleManager;
+extern AudioManager g_audioManager;
+
 
 /**
  * @class BlocoDestrutivel
@@ -63,6 +62,7 @@ private:
     MaterialTipo tipoMaterial;
 
     // --- Propriedades de Física ---
+    bool isContactActive;
     btRigidBody* corpoRigido;
     btVector3 dimensoes; // (w, h, d) - Meia-extensão (Half-Extents)
     float massa;
@@ -113,7 +113,7 @@ public:
      * @param d Profundidade total (comprimento) do bloco.
      */
     BlocoDestrutivel(MaterialTipo tipo, const char* modeloPath, float w, float h, float d)
-        : corpoRigido(nullptr), estado(EstadoDano::INTEIRO),
+        : corpoRigido(nullptr), estado(EstadoDano::INTEIRO), isContactActive(false),
         estaAnimandoDano(false), animDanoTimer(0.0f), animDanoDuracao(0.3f), // 0.3 segundos de tremor
         estaAnimandoDestruicao(false), animDestruicaoTimer(0.0f), animDestruicaoDuracao(0.5f) // 0.5 segundos encolhendo
     {
@@ -128,7 +128,7 @@ public:
             case MaterialTipo::GELO:
                 prefixoTextura = "gelo";
                 massa = 4.0f;
-                saudeTotal = 2.0f;
+                saudeTotal = 10.0f;
                 atrito = 0.1f;
                 restituicao = 0.2f;
                 pontuacaoValor = 150;
@@ -137,7 +137,7 @@ public:
             case MaterialTipo::PEDRA:
                 prefixoTextura = "pedra";
                 massa = 12.0f;
-                saudeTotal = 10.0f;
+                saudeTotal = 24.0f;
                 atrito = 0.8f;
                 restituicao = 0.05f;
                 pontuacaoValor = 300;
@@ -147,7 +147,7 @@ public:
             default:
                 prefixoTextura = "madeira";
                 massa = 8.0f;
-                saudeTotal = 4.0f;
+                saudeTotal = 10.0f;
                 atrito = 0.6f;
                 restituicao = 0.1f;
                 pontuacaoValor = 200;
@@ -173,6 +173,22 @@ public:
 
     ~BlocoDestrutivel() {
         limparFisica(nullptr);
+    }
+
+    void clearContactFlag() { 
+        isContactActive = false; 
+    }
+
+    /**
+     * @brief Retorna e define a flag de contato para TRUE, indicando o primeiro hit.
+     * @return true se era o primeiro contato, false se já estava ativo.
+     */
+    bool registerContact() {
+        if (isContactActive) {
+            return false;
+        }
+        isContactActive = true;
+        return true;
     }
 
     void update(float deltaTime) {
@@ -275,7 +291,7 @@ void aplicarDano(float dano) {
         if (estado == EstadoDano::MORRENDO || estado == EstadoDano::DESTRUIDO) return;
 
         saudeAtual -= dano;
-
+        if(dano >= 0.5f) g_audioManager.playColisao(tipoMaterial, 70);
         // --- Lógica de Troca de Textura (Dano) ---
         if (saudeAtual <= saudeTotal * 0.5f && estado == EstadoDano::INTEIRO) {
             printf("Bloco danificado!\n");
@@ -283,6 +299,7 @@ void aplicarDano(float dano) {
             if (!meshes.empty() && texturaIDDanificado != 0) {
                 meshes[0].material.textureID = texturaIDDanificado;
             }
+            
         }
 
         // --- ADICIONADO: Inicia a animação de tremor ---
@@ -298,7 +315,7 @@ void aplicarDano(float dano) {
             btVector3 pos = corpoRigido->getCenterOfMassPosition();
             // Cria a explosão de partículas com a cor do material
             g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
-            
+            g_audioManager.playDestruction(tipoMaterial);
             // Não limpe a física aqui, a animação precisa tocar primeiro!
         }
     }
@@ -339,7 +356,6 @@ void aplicarDano(float dano) {
             // Aplica a escala de encolhimento
             glScalef(escala, escala, escala);
         }
-
         // --- Correção da Escala da Normalização (código original) ---
         float maxDimOriginal = std::max({dimensoes.x()*2, dimensoes.y()*2, dimensoes.z()*2});
         float escalaNecessaria = maxDimOriginal / 0.6f;
@@ -347,6 +363,10 @@ void aplicarDano(float dano) {
 
         OBJModel::draw(); 
         glPopMatrix();
+    }
+
+    MaterialTipo getTipo(){
+        return this->tipoMaterial;
     }
 
     // --- Getters Úteis ---

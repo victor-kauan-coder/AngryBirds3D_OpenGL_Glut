@@ -10,11 +10,14 @@
 #include <cstdio>  // Necessário para a função de console 'printf'
 //objeto a ser lançado pelo esitlingue
 #include "passaros/passaro.h"
+#include "audio_manager.h"
 // (Constante M_PI, se não estiver definida)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
+
+extern AudioManager g_audioManager;
 // 3. Implementação do Construtor
 // A sintaxe "SlingshotManager::" significa que esta função "SlingshotManager"
 // pertence à classe "SlingshotManager". Este é o construtor.
@@ -122,6 +125,7 @@ void SlingshotManager::handleMouseScroll(int button) {
         if (button == 4) { 
             pouchPullDepthZ += 0.3f;
             if (pouchPullDepthZ > 6.0f) pouchPullDepthZ = 6.0f;
+            g_audioManager.playSlingshot(true);
             printf("Scroll UP. Profundidade: %.2f\n", pouchPullDepthZ);
             
         // Scroll DOWN (Geralmente 4): Puxa 'para frente' (diminui Z)
@@ -217,6 +221,7 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
             if (isPouchGrabbed && isBeingPulled && projectileInPouch) {
                 // ...LANCE!
                 launchProjectile();
+                g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
             }
             
             // Reseta todos os estados de interação

@@ -16,6 +16,7 @@
 #include "BlocoDestrutivel.h"
 #include "SlingshotManager.h"
 #include "ParticleManager.h"
+#include "audio_manager.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -23,7 +24,7 @@
 
 // --- Includes de Áudio (exemplo) ---
 // (espaço para seus includes de áudio)
-
+extern AudioManager g_audioManager;
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
@@ -39,6 +40,7 @@ btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
 ParticleManager g_particleManager;
+// AudioManager g_audioManager;
 // Modelos OBJ globais
 OBJModel blockModel;
 OBJModel treeModel;
@@ -852,6 +854,7 @@ void timer(int value) {
     
     for (auto& bloco : blocos) {
         bloco->update(deltaTime);
+        bloco->clearContactFlag();
     }
 
     g_particleManager.update(deltaTime);
@@ -878,6 +881,12 @@ void timer(int value) {
         // Se o pássaro colidiu com um bloco
         if (bloco && passaroEnvolvido) {
             float impulsoTotal = 0;
+            if (bloco->registerContact()){
+                // g_audioManager.playPassaro(SomTipo::COLISAO_PASSARO);
+                // g_audioManager.playColisao(bloco->getTipo(),70);
+                bloco->clearContactFlag();
+            }
+            
             for (int j = 0; j < contactManifold->getNumContacts(); j++) {
                 impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
             }
@@ -887,6 +896,7 @@ void timer(int value) {
             if (dano > 0.5f) { // Limite mínimo para registrar dano
                 bloco->aplicarDano(dano);
             }
+
         }
         bool blocoEnvolvido = (bloco != nullptr);
         bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
@@ -1067,6 +1077,10 @@ int main(int argc, char** argv) {
     
     // Agora 'init()' pode usar o ponteiro 'red'
     init();
+
+    if (!g_audioManager.initAudio()) {
+        printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
+    }
     
     // Configura os callbacks do GLUT
     glutDisplayFunc(display);
@@ -1102,6 +1116,7 @@ int main(int argc, char** argv) {
         delete collisionShapes[i];
     }
     
+    g_audioManager.cleanup();
     // Limpa o gerenciador
     delete g_slingshotManager;
     
