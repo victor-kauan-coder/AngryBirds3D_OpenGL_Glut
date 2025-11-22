@@ -3,7 +3,7 @@
 #include <string>
 #include <map>
 #include <cstdio>
-#include "enums.h" // Inclui a definição CANÔNICA de MaterialTipo
+#include "../util/enums.h" // Inclui a definição CANÔNICA de MaterialTipo
 
 // --- Configurações de Compilação/Inclusões SDL ---
 // Nota: Em um projeto real, você usaria includes do SDL aqui,

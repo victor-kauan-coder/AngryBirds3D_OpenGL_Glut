@@ -7,8 +7,8 @@
 #include <cmath>
 #include <string>
 #include <btBulletDynamicsCommon.h>
-#include "../loads.h"
-#include "../audio_manager.h"
+#include "../util/loads.h"
+#include "../controle_audio/audio_manager.h"
 #include <cmath> 
 
 #ifndef M_PI

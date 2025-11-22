@@ -9,11 +9,11 @@
 
 // Inclui o carregador de OBJ (de onde vem OBJModel) e o STB (para texturas)
 // Exatamente como em passaro.h
-#include "loads.h"
+#include "../util/loads.h"
 #include "ParticleManager.h"
-#include "audio_manager.h"
-#include "stb_image.h"
-#include "enums.h"
+#include "../controle_audio/audio_manager.h"
+#include "../stb/stb_image.h"
+#include "../util/enums.h"
 // --- ENUMS para facilitar a configuração ---
 
 /**

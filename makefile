@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++11 -Wall -O2
 TARGET = estilingue.exe
 
 # --- Arquivos do Projeto ---
-SOURCES = estilingue.cpp SlingshotManager.cpp stb_impl.cpp sdl_audio_manager.cpp
+SOURCES = estilingue.cpp estilingue/SlingshotManager.cpp stb/stb_impl.cpp controle_audio/sdl_audio_manager.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 # --- Caminhos e Bibliotecas (Configuração do MinGW) ---
@@ -16,7 +16,7 @@ LIB_PATH = -L/c/msys64/mingw64/lib
 LIBS = -lfreeglut -lglu32 -lopengl32 -lBulletDynamics -lBulletCollision -lLinearMath -lSDL2 -lSDL2_mixer
 
 # --- Headers Locais para Dependências ---
-HEADERS = BlocoDestrutivel.h audio_manager.h enums.h loads.h SlingshotManager.h 
+HEADERS = blocos/BlocoDestrutivel.h controle_audio/audio_manager.h util/enums.h util/loads.h estilingue/SlingshotManager.h 
 
 # --- Regras do Make ---
 
