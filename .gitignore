@@ -2,4 +2,4 @@ output/
 .vscode/
 *.exe
 *.o
-Makefile
+
