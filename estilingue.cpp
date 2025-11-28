@@ -1218,6 +1218,11 @@ int main(int argc, char** argv) {
         delete passaroAtual;  // O destrutor de Passaro deve limpar a física
         passaroAtual = nullptr;
     }
+    // Limpa todos os pássaros restantes na fila
+    for (auto* passaro : filaPassaros) {
+        delete passaro;
+    }
+    filaPassaros.clear();
     
     // Limpa os corpos e shapes do Bullet
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
