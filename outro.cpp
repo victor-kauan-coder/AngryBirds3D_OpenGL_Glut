@@ -12,11 +12,11 @@
 #include "stb_image.h"
 #include "loads.h" 
 #include "passaros/passaro.h"
-#include "passaros/red.h"
+#include "passaros/Red.h"
 #include "BlocoDestrutivel.h"
 #include "SlingshotManager.h"
 #include "ParticleManager.h"
-#include "audio_manager.h"
+#include "porcos/porco.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -24,7 +24,7 @@
 
 // --- Includes de Áudio (exemplo) ---
 // (espaço para seus includes de áudio)
-extern AudioManager g_audioManager;
+
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
@@ -40,7 +40,6 @@ btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
 btCollisionDispatcher* dispatcher = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
 ParticleManager g_particleManager;
-// AudioManager g_audioManager;
 // Modelos OBJ globais
 OBJModel blockModel;
 OBJModel treeModel;
@@ -126,6 +125,7 @@ bool gameOver = false;
 std::vector<btRigidBody*> targetBodies;
 PassaroRed* red; // Ponteiro para o nosso pássaro
 std::vector<BlocoDestrutivel*> blocos;
+std::vector<Porco*> porcos;
 // --- Funções do Jogo ---
 
 btRigidBody* createTargetBox(float mass, const btVector3& position, const btQuaternion& rotation = btQuaternion(0, 0, 0, 1)) {
@@ -306,6 +306,38 @@ void initBullet() {
         blocos.push_back(bloco);
     }
 
+    // --- CRIAÇÃO DOS PORCOS ---
+    porcos.clear(); // Limpa porcos de um jogo anterior
+    
+    // Posições para os porcos (ex: em cima de alguns blocos)
+    float yPorco = Y_NIVEL1 + (blockH / 2.0f) + 0.7f; // Y do topo do bloco + raio do porco
+    
+    // Porco 1
+    float xPorco1 = startX + (3 * espacamentoX); // Em cima do 4º bloco
+    Porco* porco1 = new Porco();
+    porco1->carregarModelo("Objetos/porco.obj");
+    porco1->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco1, yPorco + 10, centroParede.z());
+    porcos.push_back(porco1);
+
+    // Porco 2
+    float xPorco2 = startX + (8 * espacamentoX); // Em cima do 9º bloco
+    Porco* porco2 = new Porco();
+    porco2->carregarModelo("Objetos/porco.obj");
+    porco2->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco2, yPorco, centroParede.z());
+    porcos.push_back(porco2);
+
+    float xPorco3 = startX + (6 * espacamentoX); // Em cima do 7º bloco
+    Porco* porco3 = new Porco();
+    porco3->carregarModelo("Objetos/porco.obj");
+    porco3->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco3, yPorco, centroParede.z());
+    porcos.push_back(porco3);
+
+
+    float xPorco4 = startX + (4 * espacamentoX); // Em cima do 9º bloco
+    Porco* porco4 = new Porco();
+    porco4->carregarModelo("Objetos/porco.obj");
+    porco4->inicializarFisica(dynamicsWorld, centroParede.x() + xPorco4, yPorco, centroParede.z());
+    porcos.push_back(porco4);
     // NÍVEL 3: Teto (Gelo - Placa)
     // (Criando uma placa de 6x1x6)
     // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
@@ -658,6 +690,11 @@ void keyboard(unsigned char key, int x, int y) {
             // Recria o mundo, caixas e árvores
             initBullet(); 
             
+            // Limpa e recria os porcos (já feito dentro de initBullet)
+            for (auto& porco : porcos) {
+                // A recriação já é feita em initBullet, aqui apenas garantimos que o ponteiro é válido
+                // Se a lógica mudar, a recriação seria aqui.
+            }
             
             // Reseta o estado do estilingue
             if (g_slingshotManager) {
@@ -776,6 +813,11 @@ glEnable(GL_LIGHTING); //
         glPopMatrix();
     }
 
+    // Desenha os porcos
+    for (auto& porco : porcos) {
+        porco->desenhar();
+    }
+
     // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
@@ -854,7 +896,6 @@ void timer(int value) {
     
     for (auto& bloco : blocos) {
         bloco->update(deltaTime);
-        bloco->clearContactFlag();
     }
 
     g_particleManager.update(deltaTime);
@@ -866,9 +907,17 @@ void timer(int value) {
         const btCollisionObject* obA = contactManifold->getBody0();
         const btCollisionObject* obB = contactManifold->getBody1();
 
-        // Tenta encontrar o pássaro e um bloco
+        // --- Lógica de Dano para Blocos e Porcos ---
+        void* userPointerA = obA->getUserPointer();
+        void* userPointerB = obB->getUserPointer();
+
+        // Tenta converter os ponteiros para Porco e Bloco
+        Porco* porco = nullptr;
+        if (userPointerA) porco = static_cast<Porco*>(userPointerA);
+        if (!porco && userPointerB) porco = static_cast<Porco*>(userPointerB);
+
         BlocoDestrutivel* bloco = nullptr;
-        
+        // (A lógica de encontrar o bloco permanece a mesma)
         for (auto& b : blocos) {
             if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
                 bloco = b;
@@ -878,48 +927,73 @@ void timer(int value) {
         
         bool passaroEnvolvido = (obA == red->getRigidBody() || obB == red->getRigidBody());
 
+        // Calcula o impulso total do contato (mantido para lógica de blocos/chão)
+        float impulsoTotal = 0;
+        for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+            impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+        }
+        float dano_impulso = impulsoTotal * 0.1f; // Fator de conversão de impulso para dano
+
+        // Se um porco está envolvido na colisão, determine a fonte
+
+        if (porco) {
+            // 1) Se o porco colidiu com o pássaro, calcule dano baseado na velocidade relativa
+            if (passaroEnvolvido) {
+                btRigidBody* rbA = btRigidBody::upcast((btCollisionObject*)obA);
+                btRigidBody* rbB = btRigidBody::upcast((btCollisionObject*)obB);
+                btVector3 velA(0,0,0), velB(0,0,0);
+                if (rbA) velA = rbA->getLinearVelocity();
+                if (rbB) velB = rbB->getLinearVelocity();
+
+                btVector3 rel = velA - velB;
+                float speed = rel.length();
+
+                // Converte velocidade relativa em dano. Fator ajustável.
+                float dano_vel = speed * 0.1f; // <--- ajuste este fator conforme necessário
+
+                if (dano_vel > 1.0f) {
+                    porco->tomarDano(dano_vel);
+                }
+            } else {
+                // 2) Para outras colisões (chão, blocos), use o método baseado em impulso
+                if (dano_impulso > 0.8f) {
+                    porco->tomarDano(dano_impulso);
+                }
+            }
+        }
+
         // Se o pássaro colidiu com um bloco
         if (bloco && passaroEnvolvido) {
-            float impulsoTotal = 0;
-            if (bloco->registerContact()){
-                // g_audioManager.playPassaro(SomTipo::COLISAO_PASSARO);
-                // g_audioManager.playColisao(bloco->getTipo(),70);
-                bloco->clearContactFlag();
+            if (dano_impulso > 0.5f) { 
+                bloco->aplicarDano(dano_impulso);
             }
-            
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            
-            // Converte o impulso da física em "dano"
-            float dano = impulsoTotal * 0.1f; 
-            if (dano > 0.5f) { // Limite mínimo para registrar dano
-                bloco->aplicarDano(dano);
-            }
-
         }
-        bool blocoEnvolvido = (bloco != nullptr);
+        
         bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
 
-        if (blocoEnvolvido && chaoEnvolvido) {
-            float impulsoTotal = 0;
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            float dano = impulsoTotal * 0.1f; // Ajuste o fator conforme a força desejada
-            if (dano > 0.5f) { // Limite mínimo para registrar dano
-                bloco->aplicarDano(dano);
+        if (bloco && chaoEnvolvido) {
+            if (dano_impulso > 0.5f) {
+                bloco->aplicarDano(dano_impulso);
             }
         }
     }
 
-    // 2. Limpa blocos destruídos
+    // 2. Limpa blocos e porcos destruídos
     for (int i = blocos.size() - 1; i >= 0; i--) {
         if (blocos[i]->isDestruido()) {
+            score += blocos[i]->getPontuacao(); // Adiciona pontuação
             blocos[i]->limparFisica(dynamicsWorld);
             delete blocos[i];
             blocos.erase(blocos.begin() + i);
-            // score += blocos[i]->getPontuacao(); // Adiciona pontuação
+        }
+    }
+
+    for (int i = porcos.size() - 1; i >= 0; i--) {
+        if (!porcos[i]->isAtivo()) {
+            score += 500; // Pontuação por derrotar um porco
+            // A física já é limpa dentro do método tomarDano
+            delete porcos[i];
+            porcos.erase(porcos.begin() + i);
         }
     }
 
@@ -1077,10 +1151,6 @@ int main(int argc, char** argv) {
     
     // Agora 'init()' pode usar o ponteiro 'red'
     init();
-
-    if (!g_audioManager.initAudio()) {
-        printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
-    }
     
     // Configura os callbacks do GLUT
     glutDisplayFunc(display);
@@ -1116,7 +1186,6 @@ int main(int argc, char** argv) {
         delete collisionShapes[i];
     }
     
-    g_audioManager.cleanup();
     // Limpa o gerenciador
     delete g_slingshotManager;
     

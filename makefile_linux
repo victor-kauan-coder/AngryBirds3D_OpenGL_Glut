@@ -1,0 +1,46 @@
+# --- Variáveis do Compilador e Executável ---
+CXX = g++
+CXXFLAGS = -std=c++11 -Wall -O2
+TARGET = estilingue
+
+# --- Arquivos do Projeto ---
+SOURCES = estilingue.cpp SlingshotManager.cpp stb_impl.cpp sdl_audio_manager.cpp
+OBJECTS = $(SOURCES:.cpp=.o)
+
+# --- Caminhos (Linux / Docker) ---
+# No Linux, as libs instalam em pastas padrão (/usr/include), então
+# geralmente não precisamos de -L.
+# Porém, o Bullet Physics muitas vezes fica numa subpasta, então adicionamos o include:
+INC_PATHS = -I/usr/include/bullet
+
+# --- Bibliotecas (Linkagem - Ajustado para Linux) ---
+# Mudanças importantes:
+# 1. opengl32 -> GL
+# 2. glu32    -> GLU
+# 3. freeglut -> glut (ou freeglut, mas glut é o link padrão)
+# 4. Removido -lwinmm (Exclusivo do Windows)
+LIBS = -lglut -lGLU -lGL -lBulletDynamics -lBulletCollision -lLinearMath -lSDL2 -lSDL2_mixer
+
+# --- Headers Locais para Dependências ---
+HEADERS = BlocoDestrutivel.h audio_manager.h enums.h loads.h SlingshotManager.h 
+
+# --- Regras do Make ---
+
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	@echo "==> Linkando o executável no Linux: $(TARGET)"
+	$(CXX) $(OBJECTS) $(LIBS) -o $(TARGET)
+	@echo "==> Build concluído!"
+
+%.o: %.cpp $(HEADERS)
+	@echo "==> Compilando $<..."
+	$(CXX) $(CXXFLAGS) $(INC_PATHS) -c $< -o $@
+
+clean:
+	@echo "==> Limpando arquivos compilados..."
+	rm -f $(TARGET) $(OBJECTS)
+
+run: all
+	@echo "==> Executando $(TARGET)..."
+	./$(TARGET)
