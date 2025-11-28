@@ -18,7 +18,7 @@
 // Define a implementação do STB *antes* de incluir o header.
 // Isso faz com que este header inclua também o código-fonte (.cpp)
 // Lembre-se de baixar "stb_image.h" e colocá-lo na mesma pasta do projeto.
-#include "stb_image.h"
+#include "../stb/stb_image.h"
 
 /**
  * @struct Material

@@ -9,8 +9,8 @@
 #include <cmath>     // Necessário para funções matemáticas (sin, cos, sqrt, fabs)
 #include <cstdio>  // Necessário para a função de console 'printf'
 //objeto a ser lançado pelo esitlingue
-#include "passaros/passaro.h"
-#include "audio_manager.h"
+#include "../passaros/passaro.h"
+#include "../controle_audio/audio_manager.h"
 // (Constante M_PI, se não estiver definida)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846

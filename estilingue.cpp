@@ -9,14 +9,14 @@
 #include <sstream>
 #include <string>
 
-#include "stb_image.h"
-#include "loads.h" 
+#include "stb/stb_image.h"
+#include "util/loads.h" 
 #include "passaros/passaro.h"
 #include "passaros/Red.h"
-#include "BlocoDestrutivel.h"
-#include "SlingshotManager.h"
-#include "ParticleManager.h"
-#include "audio_manager.h"
+#include "blocos/BlocoDestrutivel.h"
+#include "estilingue/SlingshotManager.h"
+#include "blocos/ParticleManager.h"
+#include "controle_audio/audio_manager.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
