@@ -17,6 +17,7 @@
 #include "estilingue/SlingshotManager.h"
 #include "blocos/ParticleManager.h"
 #include "controle_audio/audio_manager.h"
+#include "menu/gameMenu.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -46,6 +47,10 @@ OBJModel blockModel;
 OBJModel treeModel;
 bool treeModelLoaded = false;
 bool blockModelLoaded = false;
+
+//MENU
+GameMenu* g_menu = nullptr; // Ponteiro para o menu
+GameState g_currentState = STATE_MENU;
 
 
 GLuint g_skyTextureID = 0;
@@ -602,77 +607,103 @@ void drawHUD() {
 
 
 // --- Callbacks do GLUT ---
-
+//modificações para mostrar a tela inicial
 void mouse(int button, int state, int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handleMouseClick(button, state, x, y);
+    if (g_currentState == STATE_GAME) {
+        // Jogo normal
+        if (g_slingshotManager) {
+            g_slingshotManager->handleMouseClick(button, state, x, y);
+        }
+    } 
+    else {
+        // Menu
+        if (g_menu) {
+            GameState newState = g_menu->handleMouseClick(button, state, x, y, g_currentState);
+            
+            if (newState == STATE_EXIT) {
+                exit(0);
+            }
+            g_currentState = newState;
+        }
     }
 }
 
 void mouseMotion(int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handleMouseDrag(x, y);
+    if (g_currentState == STATE_GAME) {
+        if (g_slingshotManager) g_slingshotManager->handleMouseDrag(x, y);
+    } else {
+        if (g_menu) g_menu->handleMouseMotion(x, y, g_currentState);
     }
 }
 
 void passiveMouseMotion(int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handlePassiveMouseMotion(x, y);
+    if (g_currentState == STATE_GAME) {
+        if (g_slingshotManager) g_slingshotManager->handlePassiveMouseMotion(x, y);
+    } else {
+        if (g_menu) g_menu->handleMouseMotion(x, y, g_currentState);
     }
 }
 
 void keyboard(unsigned char key, int x, int y) {
-    // Primeiro, delega as teclas do estilingue (Q/E)
-    if (g_slingshotManager) {
-        g_slingshotManager->handleKeyboard(key);
+    // --- 1. Lógica Global de Navegação (ESC) ---
+    if (key == 27) { // Tecla ESC
+        if (g_currentState == STATE_GAME) {
+            g_currentState = STATE_MENU; // Pausa o jogo e abre o menu
+            return;
+        } 
+        else if (g_currentState == STATE_SETTINGS) {
+            g_currentState = STATE_MENU; // Volta das configurações para o menu principal
+            return;
+        } 
+        else if (g_currentState == STATE_MENU) {
+            exit(0); // Se já estiver no menu principal, fecha o programa
+        }
     }
 
-    // Teclas globais do jogo
-    switch(key) {
-        case 27: // ESC
-            exit(0);
-            break;
-            
-        case 'r':
-        case 'R':
-            // Lógica de reset global
-            score = 0;
-            shotsRemaining = 8;
-            gameOver = false;
-            
-            // Limpa os corpos dinâmicos (caixas, pássaros)
-            for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-                btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-                btRigidBody* body = btRigidBody::upcast(obj);
-                
-                if (body && body->getInvMass() != 0) {
-                    dynamicsWorld->removeRigidBody(body);
-                    delete body->getMotionState();
-                    delete body;
-                }
-            }
-            
-            // Recria o mundo, caixas e árvores
-            initBullet(); 
-            
-            
-            // Reseta o estado do estilingue
-            if (g_slingshotManager) {
-                g_slingshotManager->reset();
-            }
-            
-            // Recria o pássaro 'red' (seu ponteiro foi limpo em clearProjectile)
-            // A inicialização em initBullet já limpa o 'red'
-            // Mas o 'red' em si precisa ser resetado
-            if(red) {
-                 red->resetar(0,0,0); // Posição inicial
-            }
+    // --- 2. Controles de Jogo (Só funcionam se estiver jogando) ---
+    if (g_currentState == STATE_GAME) {
+        
+        // Delega as teclas do estilingue (Q/E)
+        if (g_slingshotManager) {
+            g_slingshotManager->handleKeyboard(key);
+        }
 
-            printf("Jogo reiniciado!\n");
-            break;
+        switch(key) {
+            case 'r':
+            case 'R':
+                // --- Lógica de Reset (Mantida do seu código original) ---
+                score = 0;
+                shotsRemaining = 8;
+                gameOver = false;
+                
+                // Limpa os corpos dinâmicos (caixas, pássaros)
+                for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+                    btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+                    btRigidBody* body = btRigidBody::upcast(obj);
+                    
+                    if (body && body->getInvMass() != 0) {
+                        dynamicsWorld->removeRigidBody(body);
+                        delete body->getMotionState();
+                        delete body;
+                    }
+                }
+                
+                // Recria o mundo, caixas e árvores
+                initBullet(); 
+                
+                // Reseta o estado do estilingue
+                if (g_slingshotManager) {
+                    g_slingshotManager->reset();
+                }
+                
+                // Recria o pássaro 'red'
+                if(red) {
+                     red->resetar(0,0,0); // Posição inicial
+                }
+
+                printf("Jogo reiniciado!\n");
+                break;
+        }
     }
 }
 
@@ -776,6 +807,8 @@ glEnable(GL_LIGHTING); //
         glPopMatrix();
     }
 
+    
+
     // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
@@ -840,115 +873,125 @@ glEnable(GL_LIGHTING); //
 
     g_particleManager.draw();
     
-    drawHUD();
+
+    if (g_currentState == STATE_GAME) {
+        drawHUD(); // Só desenha o HUD (pontos, mira) se estiver jogando
+        if (g_slingshotManager) g_slingshotManager->draw(); // Desenha estilingue
+    } 
+    else {
+        // Se NÃO estiver jogando (Menu ou Settings), desenha o menu por cima
+        if (g_menu) g_menu->draw(g_currentState);
+    }
     
     glutSwapBuffers();
 }
 
 void timer(int value) {
-
-    float deltaTime = 1.0f / 60.0f;
-
-    // Simula a física
-    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
+    if (g_currentState == STATE_GAME)
+    {  
+        float deltaTime = 1.0f / 60.0f;
     
-    for (auto& bloco : blocos) {
-        bloco->update(deltaTime);
-        bloco->clearContactFlag();
-    }
-
-    g_particleManager.update(deltaTime);
-
-    //bloco adicionado para lidar com a colisao dos blocos
-    int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
-    for (int i = 0; i < numManifolds; i++) {
-        btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
-        const btCollisionObject* obA = contactManifold->getBody0();
-        const btCollisionObject* obB = contactManifold->getBody1();
-
-        // Tenta encontrar o pássaro e um bloco
-        BlocoDestrutivel* bloco = nullptr;
+        // Simula a física
+        dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
         
-        for (auto& b : blocos) {
-            if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
-                bloco = b;
-                break;
-            }
+        for (auto& bloco : blocos) {
+            bloco->update(deltaTime);
+            bloco->clearContactFlag();
         }
-        
-        bool passaroEnvolvido = (obA == red->getRigidBody() || obB == red->getRigidBody());
-
-        // Se o pássaro colidiu com um bloco
-        if (bloco && passaroEnvolvido) {
-            float impulsoTotal = 0;
-            if (bloco->registerContact()){
-                // g_audioManager.playPassaro(SomTipo::COLISAO_PASSARO);
-                // g_audioManager.playColisao(bloco->getTipo(),70);
-                bloco->clearContactFlag();
-            }
-            
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            
-            // Converte o impulso da física em "dano"
-            float dano = impulsoTotal * 0.1f; 
-            if (dano > 0.5f) { // Limite mínimo para registrar dano
-                bloco->aplicarDano(dano);
-            }
-
-        }
-        bool blocoEnvolvido = (bloco != nullptr);
-        bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
-
-        if (blocoEnvolvido && chaoEnvolvido) {
-            float impulsoTotal = 0;
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            float dano = impulsoTotal * 0.1f; // Ajuste o fator conforme a força desejada
-            if (dano > 0.5f) { // Limite mínimo para registrar dano
-                bloco->aplicarDano(dano);
-            }
-        }
-    }
-
-    // 2. Limpa blocos destruídos
-    for (int i = blocos.size() - 1; i >= 0; i--) {
-        if (blocos[i]->isDestruido()) {
-            blocos[i]->limparFisica(dynamicsWorld);
-            delete blocos[i];
-            blocos.erase(blocos.begin() + i);
-            // score += blocos[i]->getPontuacao(); // Adiciona pontuação
-        }
-    }
-
-    // Atualiza a física do estilingue (ex: malha voltando)
-    if (g_slingshotManager) {
-        g_slingshotManager->update();
-    }
     
-    // Lógica de pontuação (sem alterações)
-    for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-        btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-        btRigidBody* body = btRigidBody::upcast(obj);
-        
-        if (body && body->getCollisionShape() == boxShape) {
-            btTransform trans;
-            body->getMotionState()->getWorldTransform(trans);
-            float y = trans.getOrigin().getY();
+        g_particleManager.update(deltaTime);
+    
+        //bloco adicionado para lidar com a colisao dos blocos
+        int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
+        for (int i = 0; i < numManifolds; i++) {
+            btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
+            const btCollisionObject* obA = contactManifold->getBody0();
+            const btCollisionObject* obB = contactManifold->getBody1();
+    
+            // Tenta encontrar o pássaro e um bloco
+            BlocoDestrutivel* bloco = nullptr;
             
-            if (y < -2.0f) {
-                score += 100;
-                
-                auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
-                if (it != targetBodies.end()) {
-                    targetBodies.erase(it);
+            for (auto& b : blocos) {
+                if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
+                    bloco = b;
+                    break;
+                }
+            }
+            
+            bool passaroEnvolvido = (obA == red->getRigidBody() || obB == red->getRigidBody());
+    
+            // Se o pássaro colidiu com um bloco
+            if (bloco && passaroEnvolvido) {
+                float impulsoTotal = 0;
+                if (bloco->registerContact()){
+                    // g_audioManager.playPassaro(SomTipo::COLISAO_PASSARO);
+                    // g_audioManager.playColisao(bloco->getTipo(),70);
+                    bloco->clearContactFlag();
                 }
                 
-                dynamicsWorld->removeRigidBody(body);
-                delete body->getMotionState();
-                delete body;
+                for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                    impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+                }
+                
+                // Converte o impulso da física em "dano"
+                float dano = impulsoTotal * 0.1f; 
+                if (dano > 0.5f) { // Limite mínimo para registrar dano
+                    bloco->aplicarDano(dano);
+                }
+    
+            }
+            bool blocoEnvolvido = (bloco != nullptr);
+            bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
+    
+            if (blocoEnvolvido && chaoEnvolvido) {
+                float impulsoTotal = 0;
+                for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                    impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+                }
+                float dano = impulsoTotal * 0.1f; // Ajuste o fator conforme a força desejada
+                if (dano > 0.5f) { // Limite mínimo para registrar dano
+                    bloco->aplicarDano(dano);
+                }
+            }
+        }
+    
+        // 2. Limpa blocos destruídos
+        for (int i = blocos.size() - 1; i >= 0; i--) {
+            if (blocos[i]->isDestruido()) {
+                blocos[i]->limparFisica(dynamicsWorld);
+                delete blocos[i];
+                blocos.erase(blocos.begin() + i);
+                // score += blocos[i]->getPontuacao(); // Adiciona pontuação
+            }
+        }
+    
+        // Atualiza a física do estilingue (ex: malha voltando)
+        if (g_slingshotManager) {
+            g_slingshotManager->update();
+        }
+        
+        // Lógica de pontuação (sem alterações)
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
+            
+            if (body && body->getCollisionShape() == boxShape) {
+                btTransform trans;
+                body->getMotionState()->getWorldTransform(trans);
+                float y = trans.getOrigin().getY();
+                
+                if (y < -2.0f) {
+                    score += 100;
+                    
+                    auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
+                    if (it != targetBodies.end()) {
+                        targetBodies.erase(it);
+                    }
+                    
+                    dynamicsWorld->removeRigidBody(body);
+                    delete body->getMotionState();
+                    delete body;
+                }
             }
         }
     }
@@ -990,6 +1033,8 @@ void init() {
     }
     // 1. Inicializa a física
     initBullet();
+
+    g_menu = new GameMenu(WIDTH, HEIGHT);
     
     //carrega as texturas dos blocos
             for (auto& bloco : blocos) {

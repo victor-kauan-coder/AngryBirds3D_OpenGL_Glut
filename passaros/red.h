@@ -11,8 +11,8 @@ public:
         setCor(1.0f, 0.0f, 0.0f); // Vermelho
         setMassa(3.0f);
         setTipo("Red");
-        carregarModelo("Objetos/redV2.obj");
-        carregarMTL("Objetos/redV2.mtl");
+        carregarModelo("Objetos/blue.obj");
+        carregarMTL("Objetos/blue.mtl");
 
         setRaioColisao(1.2f);
     }

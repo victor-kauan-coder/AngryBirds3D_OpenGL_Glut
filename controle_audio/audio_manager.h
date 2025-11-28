@@ -117,6 +117,8 @@ public:
                 break;
         }
     }
+
+    void setVolume(float volumePercent);
 };
 
 extern AudioManager g_audioManager;
