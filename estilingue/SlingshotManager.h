@@ -115,6 +115,16 @@ public:
      * @brief Verifica se um corpo rígido (alvo) está na linha de mira.
      */
     bool isTargetInAimLine(btRigidBody* target);
+
+    /**
+     * @brief Define o novo pássaro a ser lançado.
+     */
+    void setProjectile(Passaro* novoPassaro);
+
+    /**
+     * @brief Obtém a posição atual da malha do estilingue.
+     */
+    void getPouchPosition(float& x, float& y, float& z) const;
 };
 
 #endif // SLINGSHOTMANAGER_H

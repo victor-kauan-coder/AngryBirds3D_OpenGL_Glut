@@ -146,6 +146,12 @@ void SlingshotManager::handleMouseScroll(int button) {
 void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
     // Se o jogo acabou, ignora qualquer clique
     if (*isGameOverRef) return;
+
+    // Se o pássaro atual já foi lançado e está em voo, não permite interagir com o estilingue
+    if (projectileRef && projectileRef->isEmVoo()) {
+        return;
+    }
+
     if (state == GLUT_UP && (button == 3 || button == 4)) { 
         handleMouseScroll(button);
         return; // Termina a função após tratar o scroll
@@ -237,6 +243,11 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
  * Chamado pela 'mouseMotion()' global.
  */
 void SlingshotManager::handleMouseDrag(int x, int y) {
+    // Se o pássaro atual já foi lançado e está em voo, não permite arrastar
+    if (projectileRef && projectileRef->isEmVoo()) {
+        return;
+    }
+
     // Atualiza a posição ATUAL do mouse
     currentMouseX = x;
     currentMouseY = y;
@@ -363,6 +374,36 @@ bool SlingshotManager::isTargetInAimLine(btRigidBody* target) {
     return dot > 0.95f;
 }
 
+/**
+ * @brief Define o novo pássaro a ser lançado.
+ */
+void SlingshotManager::setProjectile(Passaro* novoPassaro) {
+    // Limpa qualquer projétil atual
+    clearProjectile();
+    
+    // Atualiza a referência
+    projectileRef = novoPassaro;
+    
+    // Reseta estados de interação
+    isBeingPulled = false;
+    isPouchGrabbed = false;
+    pouchPullDepthZ = 0.0f;
+    
+    // Retorna a malha para a posição de repouso
+    pouchPositionX = (leftForkTipX + rightForkTipX) / 2.0f;
+    pouchPositionY = (leftForkTipY + rightForkTipY) / 2.0f;
+    pouchPositionZ = (leftForkTipZ + rightForkTipZ) / 2.0f;
+}
+
+/**
+ * @brief Obtém a posição atual da malha do estilingue.
+ */
+void SlingshotManager::getPouchPosition(float& x, float& y, float& z) const {
+    x = pouchPositionX;
+    y = pouchPositionY;
+    z = pouchPositionZ;
+}
+
 
 // 5. Implementação das Funções Privadas
 // (Funções auxiliares que só a própria classe pode chamar)
@@ -404,6 +445,7 @@ void SlingshotManager::createProjectileInPouch() {
     
     // 1. Reseta o pássaro para a posição inicial
     projectileRef->resetar(restX, restY, restZ); 
+    projectileRef->setEmVoo(false); // Garante que o pássaro NÃO está em voo enquanto está no estilingue
     // 2. Pede ao pássaro para criar seu corpo físico no mundo
     projectileRef->inicializarFisica(worldRef, restX, restY, restZ);
     

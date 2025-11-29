@@ -3,7 +3,7 @@
 
 #include <GL/glut.h>
 #include <btBulletDynamicsCommon.h>
-#include "../loads.h"
+#include "../util/loads.h"
 #include <string>
 
 class Porco {

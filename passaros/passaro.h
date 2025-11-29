@@ -27,55 +27,44 @@ extern AudioManager g_audioManager;
  */
 class Passaro {
 protected:
-    // Modelo 3D do pássaro
+
     OBJModel modelo;
     
-    // Bullet Physics - Rigid Body
     btRigidBody* rigidBody;
     btCollisionShape* colisaoShape;
     btDefaultMotionState* motionState;
-    
-    // Ponteiro para o mundo de física (não possui, apenas referencia)
+
     btDiscreteDynamicsWorld* mundoFisica;
     
-    // Escala do modelo
     float escala;
     
-    // Colisão esférica
     float raioColisao;
     
-    // Estado do pássaro
     bool ativo;
     bool emVoo;
     
-    // Cor do pássaro (RGB)
     float corR, corG, corB;
     
-    // Massa do pássaro (para física)
     float massa;
-    
-    // Nome/tipo do pássaro
+
     std::string tipo;
-    
-    // Restituição (quão elástico é - bouncing)
+
     float restituicao;
     
-    // Fricção
     float friccao;
     
-    // Amortecimento (damping)
     float amortecimentoLinear;
     float amortecimentoAngular;
     
-    // Rotação visual adicional (não afeta física)
     float rotacaoVisualX, rotacaoVisualY, rotacaoVisualZ;
     float anguloVisual;
 
+    float tempoVida;
+    float tempoVoo;
+    float tempoVidaMaximo;
+    float tempoVooMaximo;
+
 public:
-    /**
-     * Construtor padrão
-     * NOTA: Você DEVE chamar inicializarFisica() após criar o pássaro
-     */
     Passaro(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f, 
             float raio = 0.5f, float escalaInicial = 1.0f)
         : rigidBody(nullptr),
@@ -94,67 +83,54 @@ public:
           restituicao(0.6f),
           friccao(0.5f),
           amortecimentoLinear(0.1f),
-          amortecimentoAngular(0.1f) {
-        // A física será inicializada depois
+          amortecimentoAngular(0.1f),
+          tempoVida(0.0f),
+          tempoVoo(0.0f),
+          tempoVidaMaximo(1.0f),
+          tempoVooMaximo(5.0f)
+          {
     }
-    
-    /**
-     * Destrutor virtual - limpa recursos do Bullet Physics
-     */
     virtual ~Passaro() {
         limparFisica();
     }
     
-    /**
-     * Inicializa o sistema de física do Bullet para este pássaro
-     * DEVE ser chamado antes de usar o pássaro!
-     */
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ) {
         mundoFisica = mundo;
         
- 
-        // Cria a forma de colisão (esfera)
         colisaoShape = new btSphereShape(raioColisao * escala);
         
-        // Configura a posição inicial
         btTransform transform;
         transform.setIdentity();
         transform.setOrigin(btVector3(posX, posY, posZ));
         
-        // Cria o motion state
         motionState = new btDefaultMotionState(transform);
-        
-        // Calcula a inércia local
+
         btVector3 inerciaLocal(0, 0, 0);
         if (massa > 0.0f) {
             colisaoShape->calculateLocalInertia(massa, inerciaLocal);
         }
         
-        // Cria as informações de construção do rigid body
+
         btRigidBody::btRigidBodyConstructionInfo rbInfo(massa, motionState, colisaoShape, inerciaLocal);
         
-        // Define propriedades físicas
-        rbInfo.m_restitution = restituicao;  // Elasticidade
-        rbInfo.m_friction = friccao;          // Fricção
+
+        rbInfo.m_restitution = restituicao; 
+        rbInfo.m_friction = friccao;        
         rbInfo.m_linearDamping = amortecimentoLinear;
         rbInfo.m_angularDamping = amortecimentoAngular;
         
-        // Cria o rigid body
         rigidBody = new btRigidBody(rbInfo);
         rigidBody->setCcdMotionThreshold(0.0001f);
         rigidBody->setCcdSweptSphereRadius(raioColisao * escala);
         rigidBody->setContactProcessingThreshold(0.0f);
 
-        // Adiciona ao mundo de física
+
         mundoFisica->addRigidBody(rigidBody);
         
-        // Inicialmente parado
+
         rigidBody->setActivationState(ISLAND_SLEEPING);
     }
     
-    /**
-     * Limpa os recursos de física do Bullet
-     */
     void limparFisica() {
         if (mundoFisica && rigidBody) {
             mundoFisica->removeRigidBody(rigidBody);
@@ -176,9 +152,6 @@ public:
         }
     }
     
-    /**
-     * Carrega o modelo 3D do pássaro
-     */
     bool carregarModelo(const char* caminhoOBJ) {
         return modelo.loadFromFile(caminhoOBJ);
     }
@@ -187,10 +160,6 @@ public:
         return modelo.loadMTL(caminhoMTL);
     }
     
-    /**
-     * Desenha o pássaro na tela
-     * Método virtual para permitir customização nas classes derivadas
-     */
     virtual void desenhar() {
         if (!ativo || !rigidBody) return;
         
@@ -213,30 +182,46 @@ public:
         
         glScalef(escala, escala, escala);
         
-        // Aplica cor
         glColor3f(corR, corG, corB);
         
-        // Desenha o modelo 3D ou uma esfera padrão
         if (!modelo.vertices.empty()) {
             modelo.draw();
         } else {
-            // Desenha esfera padrão se não houver modelo carregado
+
             glutSolidSphere(raioColisao, 20, 20);
         }
         
         glPopMatrix();
 
-        // carregarModelo()
-        
-        // Desenha esfera de colisão (debug)
         #ifdef DEBUG_COLISAO
         desenharEsferaColisao();
         #endif
     }
     
     /**
-     * Desenha a esfera de colisão (wireframe) para debug
+     * Desenha o pássaro em uma posição específica (sem depender do RigidBody)
      */
+    void desenharEmPosicao(float x, float y, float z) {
+        glPushMatrix();
+        glTranslatef(x, y, z);
+        
+        // Aplica rotação visual adicional
+        float anguloDeg = anguloVisual * 180.0f / M_PI;
+        glRotatef(anguloDeg, rotacaoVisualX, rotacaoVisualY, rotacaoVisualZ);
+        
+        glScalef(escala, escala, escala);
+        
+        glColor3f(corR, corG, corB);
+        
+        if (!modelo.vertices.empty()) {
+            modelo.draw();
+        } else {
+            glutSolidSphere(raioColisao, 20, 20);
+        }
+        
+        glPopMatrix();
+    }
+
     void desenharEsferaColisao() {
         if (!rigidBody) return;
         
@@ -246,30 +231,39 @@ public:
         
         glPushMatrix();
         glTranslatef(pos.x(), pos.y(), pos.z());
-        glColor3f(0.0f, 1.0f, 0.0f); // Verde
+        glColor3f(0.0f, 1.0f, 0.0f); 
         glDisable(GL_LIGHTING);
         glutWireSphere(raioColisao * escala, 12, 12);
         glEnable(GL_LIGHTING);
         glPopMatrix();
     }
     
-    /**
-     * Atualiza a física do pássaro
-     * NOTA: A física é atualizada automaticamente pelo Bullet
-     * Este método pode ser usado para lógica adicional
-     */
     virtual void atualizar(float deltaTime) {
-        // A física é gerenciada pelo Bullet automaticamente
-        // Aqui você pode adicionar lógica de jogo adicional
         
         if (rigidBody) {
-            // Verifica se o pássaro parou de se mover (para desativá-lo)
+
             btVector3 vel = rigidBody->getLinearVelocity();
             float velocidadeTotal = vel.length();
+            if (emVoo) {
+                tempoVoo += deltaTime;
+                printf("Tempo de voo do pássaro: %f\n", tempoVoo);
+                if (tempoVoo >= tempoVooMaximo) {
+                    ativo = false;
+                    emVoo = false;
+                    limparFisica();
+                }
+            }
             
+
             if (emVoo && velocidadeTotal < 0.1f) {
-                // Pássaro parou
-                // Você pode desativá-lo ou marcar como terminado
+                tempoVida += deltaTime;
+                
+                printf("Tempo de vida do pássaro: %f\n", tempoVida);
+                if (tempoVida >= tempoVidaMaximo) {
+                    ativo = false;
+                    emVoo = false;
+                    limparFisica();
+                }
             }
         }
     }
