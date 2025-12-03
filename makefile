@@ -34,13 +34,14 @@ LIBS = -lmingw32 -lSDL2main -lSDL2_mixer -lSDL2 \
 
 # --- Regras do Make ---
 
+# Regra padrão (executada ao digitar apenas 'make')
 all: $(TARGET)
 
 # Linkagem
 $(TARGET): $(OBJECTS)
 	@echo "==> Linkando o executável: $(TARGET)"
-	$(CXX) $(OBJECTS) $(LIB_PATH) $(LIBS) -o $(TARGET)
-	@echo "==> Build concluído!"
+	$(CXX) $(OBJECTS) -o $(TARGET) $(LIB_PATH) $(LIBS)
+	@echo "==> Build concluido com sucesso!"
 
 # Compilação
 # Removemos $(HEADERS) da dependência para evitar que o Make ignore esta regra se um .h faltar
@@ -56,3 +57,5 @@ clean:
 run: all
 	@echo "==> Executando..."
 	./$(TARGET)
+
+.PHONY: all clean run

@@ -227,6 +227,7 @@ GLuint loadGlobalTexture(const char* filename) {
 }
 
 void initBullet() {
+    // 1. Inicialização do Mundo Físico
     broadphase = new btDbvtBroadphase();
     collisionConfiguration = new btDefaultCollisionConfiguration();
     dispatcher = new btCollisionDispatcher(collisionConfiguration);
@@ -235,6 +236,7 @@ void initBullet() {
     dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
     dynamicsWorld->setGravity(btVector3(0, -9.81f, 0));
     
+    // 2. Chão
     btCollisionShape* groundShape = new btStaticPlaneShape(btVector3(0, 1, 0), 0);
     collisionShapes.push_back(groundShape);
     
@@ -244,261 +246,134 @@ void initBullet() {
     btRigidBody::btRigidBodyConstructionInfo groundRigidBodyCI(
         0, groundMotionState, groundShape, btVector3(0, 0, 0));
     
-    // btRigidBody* groundRigidBody = new btRigidBody(groundRigidBodyCI);
-    
     groundRigidBody = new btRigidBody(groundRigidBodyCI);
-
     groundRigidBody->setFriction(2.0f);
-
-    // groundRigidBody->setFriction(0.8f);
-    // groundRigidBody->setRestitution(0.3f);
-    
     dynamicsWorld->addRigidBody(groundRigidBody);
 
-    // O projectileShape ainda é necessário para o *conceito* do SlingshotManager,
-    // embora estejamos passando o 'red'
-    projectileShape = new btSphereShape(0.3f); // 'red' usa este raio
+    // 3. Shapes Auxiliares
+    projectileShape = new btSphereShape(0.3f); 
     collisionShapes.push_back(projectileShape);
     
     boxShape = new btBoxShape(btVector3(0.2f, 0.2f, 1.2f));
     collisionShapes.push_back(boxShape);
     
-    targetBodies.clear();
-//     float boxMass = 2.0f;
-// float Y_BASE = 0.51f; 
-//     float Y_NIVEL2 = 1.52f; // Base (0.5) + Altura (1.0) + Folga
-//     float Y_NIVEL3 = 2.53f; // Nível 2 (1.5) + Altura (1.0) + Folga
-//     float Y_NIVEL4 = 3.54f; // Nível 3 (2.5) + Altura (1.0) + Folga
+    targetBodies.clear(); 
 
-//     // --- Definindo a Posição e Rotações ---
-//     btVector3 centroTorre(0.0f, 0.0f, -15.0f); // Posição central da construção
-//     float offset = 2.5f; // Distância do centro para os blocos
+    // ==========================================
+    // === CONSTRUÇÃO: MINI FORTALEZA ===
+    // (Configurada para seu Auto-Scale)
+    // ==========================================
+
+    const char* pathPilar = "Objetos/bloco_barra.obj"; 
+    const char* pathPlaca = "Objetos/bloco_placa.obj"; 
+    float escala = 1.75f;
+    // --- DIMENSÕES FÍSICAS (TARGET) ---
+    // Definimos aqui o tamanho FINAL que queremos no jogo.
+    // Sua lógica de escala vai encolher o OBJ de 12m para caber aqui.
     
-//     // Rotação Padrão (longo no eixo Z, como no seu btBoxShape)
-//     btQuaternion rotZ(0, 0, 0, 1);
-//     // Rotação 90 graus (gira em torno do Y para ficar longo no eixo X)
-//     btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0); 
+    float pilarH = 3.0f*escala;   // Altura final desejada (Pequena)
+    float pilarW = 0.5f*escala;   // Largura proporcional
+    float pilarD = 0.5f*escala;   // Profundidade proporcional
 
-//     // --- Construindo a Torre ---
-//     // Nível 1 (Base, longo em Z)
-//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_BASE, 0), rotZ);
-//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_BASE, 0), rotZ);
-
-//     // Nível 2 (Meio, longo em X)
-//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2, -offset), rotX);
-//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL2,  offset), rotX);
-
-//     // Nível 3 (Meio, longo em Z)
-//     createTargetBox(boxMass, centroTorre + btVector3(-offset, Y_NIVEL3, 0), rotZ);
-//     createTargetBox(boxMass, centroTorre + btVector3( offset, Y_NIVEL3, 0), rotZ);
-
-//     // Nível 4 (Topo, longo em X)
-//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4, -offset), rotX);
-//     createTargetBox(boxMass, centroTorre + btVector3(0, Y_NIVEL4,  offset), rotX);
-    float boxMass = 8.0f; // (Este valor agora é definido dentro da classe)
-
-    // Definições da construção
-    float H = 1.0f;  float G = 0.02f;
-    float Y_NIVEL1 = 0.5f + G*1; float Y_NIVEL2 = Y_NIVEL1 + H + G;
-    btVector3 centro(0.0f, 0.0f, -20.0f);
-    float L = 3.0f + G; float W = 0.5f + G;
-    btQuaternion rotZ(0, 0, 0, 1);
-    btQuaternion rotX(btVector3(0, 1, 0), M_PI / 2.0);
+    // Teto
+    float tetoH = 0.5f*escala;    
+    float tetoD = 3.0f*escala;    
     
-    const char* modeloBarra = "Objetos/bloco_barra2.obj";
-    const char* modeloPlaca = "Objetos/bloco_placa.obj"; // (Exemplo)
+    // Larguras dos andares (Proporcionalmente pequenas)
+    float tetoW_Andar1 = 3.5f*escala; 
+    float tetoW_Andar2 = 2.5f*escala; 
+    float tetoW_Andar3 = 1.5f*escala; 
 
-    float blockW = 1.0f; 
-    float blockH = 6.0f; 
-    float blockD = 1.0f; 
+    // --- POSIÇÃO ---
+    // Z = -20.0f (Perto o suficiente para ver os detalhes)
+    btVector3 centro(0.0f, 0.0f, -20.0f); 
+    btQuaternion rot(0, 0, 0, 1);         
 
-    // --- Definições de Layout Uniforme (Uma Parede) ---
-    int numBlocos = 12; 
-    float espacamentoX = blockW + 0.5f; 
+    // --- CÁLCULOS AUTOMÁTICOS DE ALTURA (Y) ---
+    float margin = 0.02f*escala; 
+    float chao = 0.02f*escala;
+
+    // Andar 1
+    float yPilar1 = chao + (pilarH / 2.0f);
+    float yTeto1  = chao + pilarH + (tetoH / 2.0f) + margin;
+
+    // Andar 2
+    float yPilar2 = yTeto1 + (tetoH / 2.0f) + (pilarH / 2.0f) + margin;
+    float yTeto2  = yTeto1 + (tetoH / 2.0f) + pilarH + (tetoH / 2.0f) + margin;
+
+    // Andar 3
+    float yPilar3 = yTeto2 + (tetoH / 2.0f) + (pilarH / 2.0f) + margin;
+    float yTeto3  = yTeto2 + (tetoH / 2.0f) + pilarH + (tetoH / 2.0f) + margin;
+
+
+    // === CRIAÇÃO DOS BLOCOS ===
+
+    // --- ANDAR 1 (BASE) ---
+    float distX1 = 1.5f*escala; 
+    float distZ = 1.0f*escala;  
     
-    // CORREÇÃO AQUI: REMOVA 'float'
-    Y_NIVEL1 = (blockH/ 2.0f) + 0.02f; // (0.25f + 0.02f = 0.27f)
+    // Pilares
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX1, yPilar1, -distZ), rot);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX1, yPilar1,  distZ), rot);
+
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yPilar1, -distZ), rot);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yPilar1,  distZ), rot);
+
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX1, yPilar1, -distZ), rot);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX1, yPilar1,  distZ), rot);
+
+    // Teto 1
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, tetoW_Andar1, tetoH, tetoD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto1, 0), rot);
+
+
+    // --- ANDAR 2 (MEIO) ---
+    float distX2 = 1.0f*escala; 
+
+    // Pilares
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX2, yPilar2, -distZ), rot);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX2, yPilar2,  distZ), rot);
     
-    btVector3 centroParede(0.0f, 0.0f, -15.0f); 
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX2, yPilar2, -distZ), rot);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX2, yPilar2,  distZ), rot);
+
+    // Teto 2
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, tetoW_Andar2, tetoH, tetoD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto2, 0), rot);
+
+
+    // --- ANDAR 3 (TOPO) ---
+    float distX3 = 0.8f*escala; 
+
+    // Pilares
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX3, yPilar3, 0), rot); 
     
-    // CORREÇÃO AQUI: REMOVA 'btQuaternion'
-    rotZ = btQuaternion(0, 0, 0, 1);
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX3, yPilar3, 0), rot); 
 
-    // Calcula o X inicial para centralizar a parede
-    float startX = -(float(numBlocos - 1) * espacamentoX) / 2.0f;
+    // Teto 3
+    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPlaca, tetoW_Andar3, tetoH, tetoD));
+    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto3, 0), rot);
 
-    // Array de materiais para variar
-    MaterialTipo materiais[] = { MaterialTipo::MADEIRA, MaterialTipo::GELO, MaterialTipo::PEDRA };
-    int numMateriais = 3;
-
-    // --- Loop para criar os 12 blocos ---
-    for (int i = 0; i < numBlocos; i++) {
-        // Escolhe um material (Madeira, Gelo, Pedra, Madeira, Gelo...)
-        MaterialTipo tipo = materiais[i % numMateriais]; 
-        
-        // Calcula a posição X deste bloco
-        float posX = startX + (i * espacamentoX);
-        
-        // 1. Cria o novo bloco
-
-        BlocoDestrutivel* bloco = new BlocoDestrutivel(tipo, modeloBarra, blockW, blockH, blockD);
-        
-        // 2. Inicializa a física na posição correta
-        bloco->inicializarFisica(dynamicsWorld, centroParede + btVector3(posX, Y_NIVEL1, 0.0f), rotZ);
-        // 3. Adiciona à lista
-        blocos.push_back(bloco);
-    }
-
-    // --- Criando Porcos ---
-    // Adiciona alguns porcos em cima dos blocos ou entre eles
-    for (int i = 1; i < numBlocos; i += 3) {
-        float posX = startX + (i * espacamentoX);
-        
-        // Cria o porco
-        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
-        porco->carregarModelo("Objetos/porco.obj"); // Tenta carregar o modelo
-        porco->carregarMTL("Objetos/porco.mtl");
-        
-        // Inicializa a física (colocando em cima do bloco)
-        // Y_NIVEL1 é o centro do bloco. Altura total é blockH. Topo é Y_NIVEL1 + blockH/2
-        float yTopoBloco = Y_NIVEL1 + (blockH / 2.0f) + 0.5f; 
-        
-        porco->inicializarFisica(dynamicsWorld, centroParede.x() + posX, yTopoBloco, centroParede.z());
-        
-        porcos.push_back(porco);
-    }
-
-    // NÍVEL 3: Teto (Gelo - Placa)
-    // NÍVEL 3: Teto (Gelo - Placa)
-    // (Criando uma placa de 6x1x6)
-    // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
-    // b4->inicializarFisica(dynamicsWorld, centro + btVector3(-L/2, Y_NIVEL3, 0), rotX);
-    // blocos.push_back(b4);
+    // --- ÁRVORES ---
     trees.clear();
     trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
-    trees.push_back(Tree(-9.0f, 0.0f, -10.0f, 12.5f));
     trees.push_back(Tree(8.0f, 0.0f, -25.0f, 12.5f));
-    trees.push_back(Tree(29.0f, 0.0f, -12.0f, 12.5f));
     trees.push_back(Tree(-14.0f, 0.0f, -18.0f, 13.5f));
     trees.push_back(Tree(13.5f, 0.0f, -20.0f, 14.8f));
-    trees.push_back(Tree(-20.0f, 0.0f, -15.0f, 22.0f));
-    trees.push_back(Tree(10.0f, 0.0f, -18.0f, 21.1f));
 }
 
-//
-// --- [ INÍCIO DA ÁREA DE EXCLUSÃO ] ---
-//
-// As funções:
-// - clearProjectile()
-// - createProjectileInPouch()
-// - drawCylinder()
-// - drawWoodenBase()
-// - drawElastic()
-// - isTargetInAimLine()
-// - drawAimLine()
-// - updateElasticPhysics()
-// - updatePouchPosition()
-// - screenToWorld()
-//
-// ... FORAM REMOVIDAS DESTA ÁREA ...
-//
-// Elas agora são métodos privados da classe SlingshotManager.
-//
-// --- [ FIM DA ÁREA DE EXCLUSÃO ] ---
-//
-
-
-// --- Funções de Renderização da Cena ---
-
-// void drawSky() {
-//     glDisable(GL_LIGHTING);
-//     glDisable(GL_DEPTH_TEST);
-    
-//     glMatrixMode(GL_PROJECTION);
-//     glPushMatrix();
-//     glLoadIdentity();
-//     glOrtho(0, 1, 0, 1, -1, 1);
-    
-//     glMatrixMode(GL_MODELVIEW);
-//     glPushMatrix();
-//     glLoadIdentity();
-    
-//     // (Código do céu, nuvens, sol, montanhas - sem alterações)
-//     glBegin(GL_QUADS);
-//     glColor3f(0.4f, 0.6f, 0.9f);
-//     glVertex2f(0, 1);
-//     glVertex2f(1, 1);
-//     glColor3f(0.7f, 0.85f, 0.95f);
-//     glVertex2f(1, 0.3f);
-//     glVertex2f(0, 0.3f);
-//     glEnd();
-    
-//     glColor3f(1.0f, 0.95f, 0.7f);
-//     glBegin(GL_TRIANGLE_FAN);
-//     glVertex2f(0.8f, 0.8f);
-//     for (int i = 0; i <= 20; i++) {
-//         float angle = (float)i / 20.0f * 2.0f * M_PI;
-//         glVertex2f(0.8f + cos(angle) * 0.08f, 0.8f + sin(angle) * 0.08f);
-//     }
-//     glEnd();
-    
-//     glColor4f(1.0f, 1.0f, 1.0f, 0.7f);
-    
-//     glBegin(GL_TRIANGLE_FAN);
-//     glVertex2f(0.2f, 0.85f);
-//     for (int i = 0; i <= 20; i++) {
-//         float angle = (float)i / 20.0f * 2.0f * M_PI;
-//         glVertex2f(0.2f + cos(angle) * 0.06f, 0.85f + sin(angle) * 0.03f);
-//     }
-//     glEnd();
-    
-//     glBegin(GL_TRIANGLE_FAN);
-//     glVertex2f(0.25f, 0.87f);
-//     for (int i = 0; i <= 20; i++) {
-//         float angle = (float)i / 20.0f * 2.0f * M_PI;
-//         glVertex2f(0.25f + cos(angle) * 0.05f, 0.87f + sin(angle) * 0.025f);
-//     }
-//     glEnd();
-    
-//     glBegin(GL_TRIANGLE_FAN);
-//     glVertex2f(0.55f, 0.9f);
-//     for (int i = 0; i <= 20; i++) {
-//         float angle = (float)i / 20.0f * 2.0f * M_PI;
-//         glVertex2f(0.55f + cos(angle) * 0.07f, 0.9f + sin(angle) * 0.035f);
-//     }
-//     glEnd();
-    
-//     glBegin(GL_TRIANGLE_FAN);
-//     glVertex2f(0.6f, 0.88f);
-//     for (int i = 0; i <= 20; i++) {
-//         float angle = (float)i / 20.0f * 2.0f * M_PI;
-//         glVertex2f(0.6f + cos(angle) * 0.05f, 0.88f + sin(angle) * 0.025f);
-//     }
-//     glEnd();
-    
-//     glColor3f(0.5f, 0.6f, 0.7f);
-//     glBegin(GL_TRIANGLES);
-//     glVertex2f(0.0f, 0.3f);
-//     glVertex2f(0.2f, 0.55f);
-//     glVertex2f(0.4f, 0.3f);
-    
-//     glVertex2f(0.3f, 0.3f);
-//     glVertex2f(0.5f, 0.6f);
-//     glVertex2f(0.7f, 0.3f);
-    
-//     glVertex2f(0.6f, 0.3f);
-//     glVertex2f(0.85f, 0.5f);
-//     glVertex2f(1.0f, 0.3f);
-//     glEnd();
-    
-//     glPopMatrix();
-//     glMatrixMode(GL_PROJECTION);
-//     glPopMatrix();
-//     glMatrixMode(GL_MODELVIEW);
-    
-//     glEnable(GL_DEPTH_TEST);
-//     glEnable(GL_LIGHTING);
-// }
 void drawSky() {
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST); // O céu não deve testar profundidade
