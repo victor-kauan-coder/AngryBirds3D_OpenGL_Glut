@@ -20,6 +20,7 @@
 #include "estilingue/SlingshotManager.h"
 #include "blocos/ParticleManager.h"
 #include "controle_audio/audio_manager.h"
+#include "menu/gameMenu.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -49,6 +50,10 @@ OBJModel blockModel;
 OBJModel treeModel;
 bool treeModelLoaded = false;
 bool blockModelLoaded = false;
+
+//MENU
+GameMenu* g_menu = nullptr; // Ponteiro para o menu
+GameState g_currentState = STATE_MENU;
 
 
 GLuint g_skyTextureID = 0;
@@ -660,11 +665,27 @@ void drawHUD() {
 
 
 // --- Callbacks do GLUT ---
-
+//modificações para mostrar a tela inicial
 void mouse(int button, int state, int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handleMouseClick(button, state, x, y);
+    if (g_currentState == STATE_GAME) {
+        // Jogo normal
+        if (g_slingshotManager) {
+            g_slingshotManager->handleMouseClick(button, state, x, y);
+        }
+    } 
+    else {
+        // Menu
+        if (g_menu) {
+            GameState newState = g_menu->handleMouseClick(button, state, x, y, g_currentState);
+            
+            if (newState == STATE_EXIT) {
+                exit(0);
+            }
+            g_currentState = newState;
+        }
+    }
+    if (passaroAtual && passaroAtual->isEmVoo() && button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN ) {
+        passaroAtual->usarHabilidade();
     }
     if (passaroAtual && passaroAtual->isEmVoo() && button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN ) {
         passaroAtual->usarHabilidade();
@@ -672,24 +693,44 @@ void mouse(int button, int state, int x, int y) {
 }
 
 void mouseMotion(int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handleMouseDrag(x, y);
+    if (g_currentState == STATE_GAME) {
+        if (g_slingshotManager) g_slingshotManager->handleMouseDrag(x, y);
+    } else {
+        if (g_menu) g_menu->handleMouseMotion(x, y, g_currentState);
     }
 }
 
 void passiveMouseMotion(int x, int y) {
-    // Delega o evento para o gerenciador
-    if (g_slingshotManager) {
-        g_slingshotManager->handlePassiveMouseMotion(x, y);
+    if (g_currentState == STATE_GAME) {
+        if (g_slingshotManager) g_slingshotManager->handlePassiveMouseMotion(x, y);
+    } else {
+        if (g_menu) g_menu->handleMouseMotion(x, y, g_currentState);
     }
 }
 
 void keyboard(unsigned char key, int x, int y) {
-    // Primeiro, delega as teclas do estilingue (Q/E)
-    if (g_slingshotManager) {
-        g_slingshotManager->handleKeyboard(key);
+    // --- 1. Lógica Global de Navegação (ESC) ---
+    if (key == 27) { // Tecla ESC
+        if (g_currentState == STATE_GAME) {
+            g_currentState = STATE_MENU; // Pausa o jogo e abre o menu
+            return;
+        } 
+        else if (g_currentState == STATE_SETTINGS) {
+            g_currentState = STATE_MENU; // Volta das configurações para o menu principal
+            return;
+        } 
+        else if (g_currentState == STATE_MENU) {
+            exit(0); // Se já estiver no menu principal, fecha o programa
+        }
     }
+
+    // --- 2. Controles de Jogo (Só funcionam se estiver jogando) ---
+    if (g_currentState == STATE_GAME) {
+        
+        // Delega as teclas do estilingue (Q/E)
+        if (g_slingshotManager) {
+            g_slingshotManager->handleKeyboard(key);
+        }
 
     // Teclas globais do jogo
     switch(key) {
@@ -732,8 +773,9 @@ void keyboard(unsigned char key, int x, int y) {
                 passaroAtual->resetar(0,0,0); // Posição inicial
             }
 
-            printf("Jogo reiniciado!\n");
-            break;
+                printf("Jogo reiniciado!\n");
+                break;
+        }
     }
 }
 
@@ -913,7 +955,15 @@ glEnable(GL_LIGHTING); //
 
     g_particleManager.draw();
     
-    drawHUD();
+
+    if (g_currentState == STATE_GAME) {
+        drawHUD(); // Só desenha o HUD (pontos, mira) se estiver jogando
+        if (g_slingshotManager) g_slingshotManager->draw(); // Desenha estilingue
+    } 
+    else {
+        // Se NÃO estiver jogando (Menu ou Settings), desenha o menu por cima
+        if (g_menu) g_menu->draw(g_currentState);
+    }
     
     glutSwapBuffers();
 }
@@ -1095,6 +1145,8 @@ void init() {
     }
     // 1. Inicializa a física
     initBullet();
+
+    g_menu = new GameMenu(WIDTH, HEIGHT);
     
     //carrega as texturas dos blocos
             for (auto& bloco : blocos) {

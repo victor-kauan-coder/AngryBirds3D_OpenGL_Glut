@@ -50,6 +50,24 @@ bool AudioManager::initAudio() {
     return false;
 }
 
+void AudioManager::setVolume(float volumePercent) {
+    // 1. Limita o valor entre 0 e 100 para evitar erros
+    if (volumePercent < 0.0f) volumePercent = 0.0f;
+    if (volumePercent > 100.0f) volumePercent = 100.0f;
+
+    // 2. Converte de 0-100 para 0-128 (Escala do SDL_mixer)
+    int sdlVolume = (int)((volumePercent / 100.0f) * MIX_MAX_VOLUME);
+
+    // 3. Aplica o volume na MÚSICA
+    Mix_VolumeMusic(sdlVolume);
+
+    // 4. Aplica o volume nos EFEITOS SONOROS (Canal -1 afeta todos os canais)
+    Mix_Volume(-1, sdlVolume);
+    
+    // Opcional: Print para debug
+    // printf("Volume ajustado para: %d (SDL: %d)\n", (int)volumePercent, sdlVolume);
+}
+
 // Função auxiliar para carregar um som e mapeá-lo
 bool AudioManager::loadSound(SomTipo type, const std::string& path) {
     Mix_Chunk* chunk = Mix_LoadWAV(path.c_str());
