@@ -32,7 +32,8 @@ enum class SomTipo {
     COLISAO_MADEIRA,
     COLISAO_PEDRA,
     COLISAO_PASSARO,
-    TIPO_MAX
+    TIPO_MAX,
+    CHUCK_SPEED_BOOST
 };
 
 /**

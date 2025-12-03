@@ -2,8 +2,8 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <cmath>
-#include "../loads.h"
-#include "../openGL_util.h"
+#include "../util/loads.h"
+#include "../util/openGL_util.h"
 #include "porco.h"
 #include <iostream>
 

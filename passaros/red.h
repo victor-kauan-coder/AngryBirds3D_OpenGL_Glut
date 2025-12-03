@@ -1,4 +1,6 @@
-#pragma once
+#ifndef RED_H
+#define RED_H
+
 #include "passaro.h"
 /**
  * Exemplo de classe derivada: Red (Pássaro vermelho - padrão)
@@ -22,3 +24,4 @@ public:
         // Poderia emitir um grito ou algo assim
     }
 };
+#endif // RED_H
