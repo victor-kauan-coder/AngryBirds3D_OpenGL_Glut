@@ -2,7 +2,10 @@
 #define BOMB_H
 
 #include "passaro.h"
+#include "../blocos/ParticleManager.h"
 #include <vector>
+
+extern ParticleManager g_particleManager;
 
 /**
  * Classe derivada: Bomb (Bomba)
@@ -34,33 +37,33 @@ public:
         btTransform transform;
         rigidBody->getMotionState()->getWorldTransform(transform);
         btVector3 pos = transform.getOrigin();
-
-        glPushMatrix();
-        glTranslatef(pos.x(), pos.y(), pos.z());
+        // DEBUG: Desenha o raio de explosão
+        // glPushMatrix();
+        // glTranslatef(pos.x(), pos.y(), pos.z());
         
-        // Cor vermelha para o raio de explosão
-        glColor3f(1.0f, 0.0f, 0.0f); 
-        glDisable(GL_LIGHTING); // Para ver melhor as linhas
-        glutWireSphere(raioExplosao, 20, 20);
-        glEnable(GL_LIGHTING);
+        // // Cor vermelha para o raio de explosão
+        // glColor3f(1.0f, 0.0f, 0.0f); 
+        // glDisable(GL_LIGHTING); // Para ver melhor as linhas
+        // glutWireSphere(raioExplosao, 20, 20);
+        // glEnable(GL_LIGHTING);
         
-        glPopMatrix();
+        // glPopMatrix();
     }
 
     void desenharEmPosicao(float x, float y, float z) override {
         Passaro::desenharEmPosicao(x, y, z);
 
         // Desenha o raio de explosão para debug (mesmo no estilingue)
-        glPushMatrix();
-        glTranslatef(x, y, z);
+        //DEBUG: Desenha o raio de explosão
+        // glPushMatrix();
+        // glTranslatef(x, y, z);
+        // // Cor vermelha para o raio de explosão
+        // glColor3f(1.0f, 0.0f, 0.0f); 
+        // glDisable(GL_LIGHTING); 
+        // glutWireSphere(raioExplosao, 20, 20);
+        // glEnable(GL_LIGHTING);
         
-        // Cor vermelha para o raio de explosão
-        glColor3f(1.0f, 0.0f, 0.0f); 
-        glDisable(GL_LIGHTING); 
-        glutWireSphere(raioExplosao, 20, 20);
-        glEnable(GL_LIGHTING);
-        
-        glPopMatrix();
+        // glPopMatrix();
     }
     
     void usarHabilidade() override {
@@ -71,6 +74,9 @@ public:
         printf("Habilidade Bomb ativada: EXPLOSAO! (Raio: %.1f, Forca: %.1f)\n", raioExplosao, forcaExplosao);
         
         btVector3 centroExplosao = getPosicao();
+
+        // Efeito visual da explosão
+        g_particleManager.createFireExplosion(centroExplosao, 100, raioExplosao / 2.0f);
         
         // Itera sobre todos os objetos de colisão no mundo
         int numObjects = mundoFisica->getNumCollisionObjects();

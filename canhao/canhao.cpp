@@ -1,13 +1,16 @@
 #include "canhao.h"
+#include "../blocos/ParticleManager.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 #include <iostream>
 
+extern ParticleManager g_particleManager;
+
 Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* world, btVector3 targetPos)
     : Porco(posX, posY, posZ, 0.5f, 3.0f), // Scale 3.0f similar to pigs
       timeSinceLastShot(0.0f),
-      shootInterval(3.0f), // Intervalo reduzido para 3 segundos para teste
+      shootInterval(15.0f), // Intervalo reduzido para 3 segundos para teste
       targetPosition(targetPos),
       worldRef(world),
       lastVelocity(0,0,0),
@@ -129,6 +132,9 @@ void Cannon::shoot() {
     
     projectiles.push_back(projectile);
     std::cout << "Canhao atirou!" << std::endl;
+
+    // Efeito de explosão ao atirar
+    g_particleManager.createFireExplosion(spawnPos, 20, 1.0f);
 }
 
 void Cannon::atualizar(float deltaTime) {

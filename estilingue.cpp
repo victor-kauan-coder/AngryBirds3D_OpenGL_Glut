@@ -1045,16 +1045,16 @@ void timer(int value) {
                 Porco* porcoColidindo = canhao->getProjectile();
                 if (otherOb == porcoColidindo->getRigidBody()) {
                     printf("DEBUG: Porco colidindo com estilingue!\n");
+                    float velocity = porcoColidindo->getRigidBody()->getLinearVelocity().length();
+                    printf("DEBUG: Impulso total na colisao com estilingue: %.2f\n", velocity);
+                    // Se houve impacto real (threshold baixo)
+                    if (velocity > 0.1f) { 
+                        g_slingshotManager->takeDamage();
+                        porcoColidindo->tomarDano(500.0f); 
+                        contactManifold->clearManifold();
+                    }
                 }
-                float velocity = porcoColidindo->getRigidBody()->getLinearVelocity().length();
-                printf("DEBUG: Impulso total na colisao com estilingue: %.2f\n", velocity);
-                // Se houve impacto real (threshold baixo)
-                if (velocity > 0.1f) { 
-                    g_slingshotManager->takeDamage();
-                    porcoColidindo->tomarDano(500.0f); 
-                    contactManifold->clearManifold();
-                }
-                
+                    
             }
         }
                     
