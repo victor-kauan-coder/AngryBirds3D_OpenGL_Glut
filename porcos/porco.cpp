@@ -26,8 +26,14 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       restituicao(0.5f),
       friccao(0.8f),
       amortecimentoLinear(0.2f),
-      amortecimentoAngular(0.2f) {
-
+      amortecimentoAngular(0.2f),
+      posicaoInicial(0,0,0),
+      saiuDaPosicao(false),
+      tempoDesdeSaida(0.0f),
+      tempoParaSumir(3.0f) { // 3 segundos para sumir após sair da posição
+    
+    carregarModelo("Objetos/porco.obj");
+    carregarMTL("Objetos/porco.mtl");
 }
 
 Porco::~Porco() {
@@ -66,6 +72,11 @@ void Porco::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float 
     
     // Força a ativação do corpo para que a gravidade seja aplicada imediatamente
     rigidBody->activate(true);
+    
+    // Define a posição inicial para controle de desaparecimento
+    posicaoInicial = btVector3(posX, posY, posZ);
+    saiuDaPosicao = false;
+    tempoDesdeSaida = 0.0f;
 }
 
 void Porco::limparFisica() {
@@ -118,7 +129,26 @@ void Porco::desenhar() {
 
 void Porco::atualizar(float deltaTime) {
     if (!ativo) return;
-    // Lógica adicional pode ser colocada aqui, como animações.
+    
+    // Verifica se saiu da posição inicial
+    if (!saiuDaPosicao && rigidBody) {
+        btVector3 posAtual = getPosicao();
+        float dist = posAtual.distance(posicaoInicial);
+        // Se moveu mais que 1.0 unidade (ajuste conforme necessário)
+        if (dist > 1.0f) { 
+            saiuDaPosicao = true;
+            // std::cout << "Porco saiu da posicao inicial!" << std::endl;
+        }
+    }
+
+    // Se já saiu da posição, conta o tempo para sumir
+    if (saiuDaPosicao) {
+        tempoDesdeSaida += deltaTime;
+        if (tempoDesdeSaida >= tempoParaSumir) {
+            std::cout << "Porco desapareceu apos sair da posicao!" << std::endl;
+            tomarDano(vidaMaxima + 1000.0f); // Mata instantaneamente
+        }
+    }
 }
 
 void Porco::tomarDano(float dano) {
@@ -161,6 +191,11 @@ void Porco::resetar(float posX, float posY, float posZ) {
 
     vida = vidaMaxima;
     setAtivo(true);
+    
+    // Reseta lógica de desaparecimento
+    posicaoInicial = btVector3(posX, posY, posZ);
+    saiuDaPosicao = false;
+    tempoDesdeSaida = 0.0f;
 }
 
 btVector3 Porco::getPosicao() const {

@@ -28,6 +28,12 @@ protected:
     float amortecimentoLinear;
     float amortecimentoAngular;
 
+    // Controle de desaparecimento por movimento
+    btVector3 posicaoInicial;
+    bool saiuDaPosicao;
+    float tempoDesdeSaida;
+    float tempoParaSumir;
+
 public:
     Porco(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f, 
         float raio = 0.2f, float escalaInicial = 3.0f);
@@ -52,6 +58,7 @@ public:
     bool isAtivo() const { return ativo; }
     void setAtivo(bool valor) { ativo = valor; }
     float getVida() const { return vida; }
+    float setVida(float valor) { vida = valor; return vida; }
     btRigidBody* getRigidBody() { return rigidBody; }
     const btRigidBody* getRigidBody() const { return rigidBody; }
 };

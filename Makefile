@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++11 -Wall -O2
 TARGET = estilingue.exe
 
 # --- Arquivos do Projeto ---
-SOURCES = estilingue.cpp estilingue/SlingshotManager.cpp stb/stb_impl.cpp controle_audio/sdl_audio_manager.cpp porcos/porco.cpp
+SOURCES = estilingue.cpp estilingue/SlingshotManager.cpp stb/stb_impl.cpp controle_audio/sdl_audio_manager.cpp porcos/porco.cpp canhao/canhao.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 # --- Caminhos e Bibliotecas (Configuração do MinGW) ---
