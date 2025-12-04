@@ -19,7 +19,7 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
     this->vidaMaxima = 50.0f;
     this->vida = 50.0f;
     this->massa = 10.0f; // Heavier than a pig
-    this->escala = 3.0f;
+    this->escala = 5.0f;
     // Load cannon model
     // Note: The path is relative to the executable or working directory.
     // Assuming "Objetos/" is in the working directory.
