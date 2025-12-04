@@ -58,7 +58,7 @@ public:
     bool isAtivo() const { return ativo; }
     void setAtivo(bool valor) { ativo = valor; }
     float getVida() const { return vida; }
-    float setVida(float valor) { vida = valor; return vida; }
+    void setVida(float valor) { vida = valor; }
     btRigidBody* getRigidBody() { return rigidBody; }
     const btRigidBody* getRigidBody() const { return rigidBody; }
 };
