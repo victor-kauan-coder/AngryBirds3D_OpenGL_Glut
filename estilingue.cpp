@@ -18,9 +18,11 @@
 #include "blocos/BlocoDestrutivel.h"
 #include "porcos/porco.h"
 #include "estilingue/SlingshotManager.h"
+#include "canhao/canhao.h"
 #include "blocos/ParticleManager.h"
 #include "controle_audio/audio_manager.h"
 #include "menu/gameMenu.h"
+
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -134,6 +136,8 @@ bool gameOver = false;
 std::vector<btRigidBody*> targetBodies;
 std::vector<Passaro*>::iterator itPassaroAtual; // Iterador para a fila
 Passaro* passaroAtual = nullptr;
+std::vector<Cannon*> cannons;
+// Fila de pássaros
 std::vector<Passaro*> filaPassaros;
 std::vector<BlocoDestrutivel*> blocos;
 std::vector<Porco*> porcos;
@@ -264,6 +268,35 @@ void initBullet() {
     // (Configurada para seu Auto-Scale)
     // ==========================================
 
+    // --- Criando Porcos ---
+    // Adiciona alguns porcos em cima dos blocos ou entre eles
+    for (int i = 1; i < numBlocos; i += 3) {
+        float posX = startX + (i * espacamentoX);
+        // Cria o porco
+        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
+        // Inicializa a física (colocando em cima do bloco)
+        // Y_NIVEL1 é o centro do bloco. Altura total é blockH. Topo é Y_NIVEL1 + blockH/2
+        float yTopoBloco = Y_NIVEL1 + (blockH / 2.0f) + 0.5f; 
+        porco->inicializarFisica(dynamicsWorld, centroParede.x() + posX, yTopoBloco, centroParede.z());
+        porcos.push_back(porco);
+    }
+
+    // Cria um canhão ao lado do primeiro porco (no topo do bloco vizinho)
+    // O primeiro porco está no bloco i=1. Vamos colocar o canhão no bloco i=2.
+    float posBlocoVizinhoX = startX + (2 * espacamentoX);
+    // Y_NIVEL1 é o centro do bloco. Altura total é blockH. Topo é Y_NIVEL1 + blockH/2
+    float yTopoBloco = Y_NIVEL1 + (blockH / 2.0f) + 0.5f; 
+    
+    // O construtor do Cannon já inicializa a física
+    Cannon* cannon = new Cannon(centroParede.x() + posBlocoVizinhoX, yTopoBloco, centroParede.z(), dynamicsWorld, btVector3(0.0f, 3.0f, 12.0f));
+    cannons.push_back(cannon);
+
+    // NÍVEL 3: Teto (Gelo - Placa)
+    // NÍVEL 3: Teto (Gelo - Placa)
+    // (Criando uma placa de 6x1x6)
+    // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
+    // b4->inicializarFisica(dynamicsWorld, centro + btVector3(-L/2, Y_NIVEL3, 0), rotX);
+    // blocos.push_back(b4);
     const char* pathPilar = "Objetos/bloco_barra.obj"; 
     const char* pathPlaca = "Objetos/bloco_placa.obj"; 
     float escala = 1.75f;
@@ -766,6 +799,11 @@ glEnable(GL_LIGHTING); //
         porco->desenhar();
     }
 
+    // Desenha os canhões
+    for (auto& cannon : cannons) {
+        cannon->desenhar();
+    }
+
     // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
@@ -860,9 +898,16 @@ void timer(int value) {
         passaroAtual->atualizar(deltaTime);
         
         // Se o pássaro atual "morreu" (foi desativado após o tempo de vida)
-        if (!passaroAtual->isAtivo()) {
+    if (!passaroAtual->isAtivo()) {
             proximoPassaro();
         }
+    }
+    for (auto& porco : porcos) {
+        porco->atualizar(deltaTime);
+    }
+
+    for (auto& cannon : cannons) {
+        cannon->atualizar(deltaTime);
     }
 
     g_particleManager.update(deltaTime);
@@ -1107,13 +1152,13 @@ int main(int argc, char** argv) {
     // CRÍTICO: Criar o objeto 'red' ANTES de chamar init()
         // red = new PassaroRed(0.0f, 0.0f, 0.0f);
         // chuck = new PassaroChuck(0.0f, 0.0f, 0.0f);
-    
+    // cria a fila de passaros
     for (int i = 0; i < 8; i+=3) {
         filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
         filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
         filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
     }
-    
+
     // Inicializa o iterador e o primeiro pássaro
     itPassaroAtual = filaPassaros.begin();
     if (itPassaroAtual != filaPassaros.end()) {

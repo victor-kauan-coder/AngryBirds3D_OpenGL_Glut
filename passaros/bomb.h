@@ -24,6 +24,28 @@ public:
 
         setRaioColisao(1.2f);
     }
+
+    void desenhar() override {
+        Passaro::desenhar(); // Desenha o pássaro normal
+
+        if (!rigidBody) return;
+
+        // Desenha o raio de explosão para debug
+        btTransform transform;
+        rigidBody->getMotionState()->getWorldTransform(transform);
+        btVector3 pos = transform.getOrigin();
+
+        glPushMatrix();
+        glTranslatef(pos.x(), pos.y(), pos.z());
+        
+        // Cor vermelha para o raio de explosão
+        glColor3f(1.0f, 0.0f, 0.0f); 
+        glDisable(GL_LIGHTING); // Para ver melhor as linhas
+        glutWireSphere(raioExplosao, 20, 20);
+        glEnable(GL_LIGHTING);
+        
+        glPopMatrix();
+    }
     
     void usarHabilidade() override {
         if (!isEmVoo()) return;
