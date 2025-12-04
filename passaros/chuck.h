@@ -26,7 +26,7 @@ public:
         btVector3 velAtual = getVelocidade();
         btVector3 direcao = velAtual.normalized();
         
-        btVector3 novaVelocidade = velAtual + direcao * (velAtual.length() * 2.0f);
+        btVector3 novaVelocidade = velAtual + direcao * (velAtual.length() * 1.4f);
         setVelocidade(novaVelocidade.x(), novaVelocidade.y(), novaVelocidade.z());
         
         // g_audioManager.loadSound(SomTipo::CHUCK_SPEED_BOOST, "chuck_speed_boost.wav");

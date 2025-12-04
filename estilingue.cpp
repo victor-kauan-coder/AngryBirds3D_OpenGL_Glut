@@ -73,7 +73,7 @@ SlingshotManager* g_slingshotManager = nullptr; // ponteiro para o gerenciador d
 LightingManager g_lightingManager; //manager da iluuminação
 // Variáveis globais de câmera e jogo
 float cameraAngleH = 0.0f;
-float cameraAngleV = 15.0f;
+float cameraAngleV = 14.0f;
 float cameraDistance = 28.0f;
 float cameraTargetY = 3.0f;
 
@@ -213,115 +213,194 @@ void initBullet() {
     // === CONSTRUÇÃO: MINI FORTALEZA ===
     // (Configurada para seu Auto-Scale)
     // ==========================================
-
+// ==========================================================
+    // === 1. DEFINIÇÕES GLOBAIS (NÃO APAGUE) ===
+    // ==========================================================
     const char* pathPilar = "Objetos/bloco_barra.obj"; 
     const char* pathPlaca = "Objetos/bloco_placa.obj"; 
-    float escala = 1.75f;
-    // --- DIMENSÕES FÍSICAS (TARGET) ---
-    // Definimos aqui o tamanho FINAL que queremos no jogo.
-    // Sua lógica de escala vai encolher o OBJ de 12m para caber aqui.
     
-    float pilarH = 3.0f*escala;   // Altura final desejada (Pequena)
-    float pilarW = 0.5f*escala;   // Largura proporcional
-    float pilarD = 0.5f*escala;   // Profundidade proporcional
+    // Escala e Unidade
+    float escala = 1.5f; 
+    float unit = 0.5f * escala; 
 
-    // Teto
-    float tetoH = 0.5f*escala;    
-    float tetoD = 3.0f*escala;    
+    // Dimensões dos Blocos
+    float pilarW = 1.0f * unit; 
+    float pilarH = 6.0f * unit; 
+    float pilarD = 1.0f * unit; 
+
+    float placaW = 6.0f * unit; 
+    float placaH = 1.0f * unit; 
+    float placaD = 6.0f * unit; 
+
+    // Posição Base e Rotação
+    btVector3 centro(0.0f, 0.0f, -40.0f); 
+    btQuaternion rot(0, 0, 0, 1);       
     
-    // Larguras dos andares (Proporcionalmente pequenas)
-    float tetoW_Andar1 = 3.5f*escala; 
-    float tetoW_Andar2 = 2.5f*escala; 
-    float tetoW_Andar3 = 1.5f*escala; 
+    // float margin = 0.04f; 
+    float distZ_Pilar = 2.0f * unit; 
 
-    // --- POSIÇÃO ---
-    // Z = -20.0f (Perto o suficiente para ver os detalhes)
-    btVector3 centro(0.0f, 0.0f, -20.0f); 
-    btQuaternion rot(0, 0, 0, 1);         
-
-    // --- CÁLCULOS AUTOMÁTICOS DE ALTURA (Y) ---
-    float margin = 0.02f*escala; 
-    float chao = 0.02f*escala;
-
-    // Andar 1
-    float yPilar1 = chao + (pilarH / 2.0f);
-    float yTeto1  = chao + pilarH + (tetoH / 2.0f) + margin;
-
-    // Andar 2
-    float yPilar2 = yTeto1 + (tetoH / 2.0f) + (pilarH / 2.0f) + margin;
-    float yTeto2  = yTeto1 + (tetoH / 2.0f) + pilarH + (tetoH / 2.0f) + margin;
-
-    // Andar 3
-    float yPilar3 = yTeto2 + (tetoH / 2.0f) + (pilarH / 2.0f) + margin;
-    float yTeto3  = yTeto2 + (tetoH / 2.0f) + pilarH + (tetoH / 2.0f) + margin;
-
-
-    // === CRIAÇÃO DOS BLOCOS ===
-
-    // --- ANDAR 1 (BASE) ---
-    float distX1 = 1.5f*escala; 
-    float distZ = 1.0f*escala;  
+    // ==========================================================
+    // === 2. LÓGICA DAS DUAS TORRES RETAS ===
+    // ==========================================================
     
-    // Pilares
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX1, yPilar1, -distZ), rot);
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX1, yPilar1,  distZ), rot);
+    float distanciaSeparacao = 35.0f * unit; 
+    float avancoZ = 15.0f * unit; 
 
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yPilar1, -distZ), rot);
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yPilar1,  distZ), rot);
+    // --- CORREÇÃO 1: MARGEM ZERO ---
+    // Removemos o espaço entre blocos para eles nascerem encostados
+    float margin = 0.00f; 
 
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX1, yPilar1, -distZ), rot);
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX1, yPilar1,  distZ), rot);
+    // Loop para criar 3 torres
+    for (int idTorre = 0; idTorre < 3; idTorre++) {
+        
+        float centroXTorre;
+        float centroZTorre;
 
-    // Teto 1
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, tetoW_Andar1, tetoH, tetoD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto1, 0), rot);
+        switch(idTorre){
+            case 0: centroXTorre = centro.x() - (distanciaSeparacao / 2.0f); centroZTorre = centro.z(); break;
+            case 1: centroXTorre = centro.x() + (distanciaSeparacao / 2.0f); centroZTorre = centro.z(); break;
+            case 2: centroXTorre = centro.x(); centroZTorre = centro.z() + avancoZ; break;
+        }
+      
+        // --- CORREÇÃO 2: COMEÇAR NO CHÃO PERFEITO ---
+        float currentY = 0.0f; 
 
+        int totalAndares = 6;      
+        int raioFixo = 1;       
 
-    // --- ANDAR 2 (MEIO) ---
-    float distX2 = 1.0f*escala; 
+        for (int andar = 0; andar < totalAndares; andar++) {
+            
+            MaterialTipo mat;
+            if (andar <= 1) mat = MaterialTipo::PEDRA;      
+            else if (andar <= 3) mat = MaterialTipo::MADEIRA; 
+            else mat = MaterialTipo::GELO;                  
 
-    // Pilares
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX2, yPilar2, -distZ), rot);
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX2, yPilar2,  distZ), rot);
-    
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX2, yPilar2, -distZ), rot);
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::GELO, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX2, yPilar2,  distZ), rot);
+            int raioAtual = raioFixo; 
+            int fileirasProfundidade = 1; 
 
-    // Teto 2
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, tetoW_Andar2, tetoH, tetoD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto2, 0), rot);
+            float yPilar = currentY + (pilarH / 2.0f);
+            float yPlaca = currentY + pilarH + (placaH / 2.0f) + margin;
 
+            for (int rowZ = 0; rowZ < fileirasProfundidade; rowZ++) {
+                
+                float offsetZ = 3.0f; 
+                if (fileirasProfundidade > 1) {
+                     offsetZ = (rowZ == 0) ? -(placaD / 2.0f) : (placaD / 2.0f);
+                }
 
-    // --- ANDAR 3 (TOPO) ---
-    float distX3 = 0.8f*escala; 
+                for (int i = -raioAtual; i <= raioAtual; i++) {
+                    
+                    float xPos = centroXTorre + (i * placaW); 
+                    float zPos = centroZTorre + offsetZ;
 
-    // Pilares
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(-distX3, yPilar3, 0), rot); 
-    
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3( distX3, yPilar3, 0), rot); 
+                    // --- FUNÇÃO AUXILIAR PARA ESTABILIZAR ---
+                    auto estabilizarBloco = [&](BlocoDestrutivel* b) {
+                        btRigidBody* rb = b->getRigidBody();
+                        if(rb) {
+                            // O SEGREDO: Força o bloco a "dormir" até ser atingido
+                            rb->setActivationState(ISLAND_SLEEPING);
+                            // Aumenta o amortecimento para evitar tremedeira
+                            rb->setDamping(0.5f, 0.5f); 
+                            // Aumenta atrito para não escorregar
+                            rb->setFriction(2.5f); 
+                        }
+                    };
 
-    // Teto 3
-    blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPlaca, tetoW_Andar3, tetoH, tetoD));
-    blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto3, 0), rot);
+                    // Pilar 1
+                    blocos.push_back(new BlocoDestrutivel(mat, pathPilar, pilarW, pilarH, pilarD));
+                    blocos.back()->inicializarFisica(dynamicsWorld, btVector3(xPos, yPilar, zPos + distZ_Pilar), rot);
+                    estabilizarBloco(blocos.back()); // <--- APLICA ESTABILIDADE
+
+                    // Pilar 2
+                    blocos.push_back(new BlocoDestrutivel(mat, pathPilar, pilarW, pilarH, pilarD));
+                    blocos.back()->inicializarFisica(dynamicsWorld, btVector3(xPos, yPilar, zPos - distZ_Pilar), rot);
+                    estabilizarBloco(blocos.back()); // <--- APLICA ESTABILIDADE
+
+                    // Placa
+                    blocos.push_back(new BlocoDestrutivel(mat, pathPlaca, placaW, placaH, placaD));
+                    blocos.back()->inicializarFisica(dynamicsWorld, btVector3(xPos, yPlaca, zPos), rot);
+                    estabilizarBloco(blocos.back()); // <--- APLICA ESTABILIDADE
+                }
+            }
+            currentY += pilarH + placaH + margin;
+        }
+
+        // === DETALHE NO TOPO ===
+        float yTopoPilar = currentY + (pilarH / 2.0f);
+        float yTopoPlaca = currentY + pilarH + (placaH / 2.0f) + margin;
+        
+        blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPilar, centroZTorre), rot);
+        // Aplica estabilidade no topo também
+        blocos.back()->getRigidBody()->setActivationState(ISLAND_SLEEPING);
+
+        blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, placaW, placaH, placaD));
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPlaca, centroZTorre), rot);
+        blocos.back()->getRigidBody()->setActivationState(ISLAND_SLEEPING);
+    }
 
     // --- ÁRVORES ---
     trees.clear();
-    trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
-    trees.push_back(Tree(8.0f, 0.0f, -25.0f, 12.5f));
-    trees.push_back(Tree(-14.0f, 0.0f, -18.0f, 13.5f));
-    trees.push_back(Tree(13.5f, 0.0f, -20.0f, 14.8f));
+    // trees.push_back(Tree(-7.0f, 0.0f, -50.0f, 16.0f));
+    // trees.push_back(Tree(-16.0f, 0.0f, -50.0f, 15.3f));
+    // trees.push_back(Tree(-25.0f, 0.0f, -50.0f, 16.1f));
+    // trees.push_back(Tree(-34.0f, 0.0f, -50.0f, 15.0f));
+    // trees.push_back(Tree(-43.0f, 0.0f, -50.0f, 15.2f));
+    // trees.push_back(Tree(-52.0f, 0.0f, -50.0f, 16.0f));
+    // trees.push_back(Tree(-16.5f, 0.0f, -40.0f, 14.0f));
+    // trees.push_back(Tree(-20.5f, 0.0f, -35.0f, 14.0f));
+    // trees.push_back(Tree(-33.5f, 0.0f, -35.0f, 14.0f));
+    // trees.push_back(Tree(-20.5f, 0.0f, -20.0f, 12.0f));
+    // trees.push_back(Tree(7.0f, 0.0f, -50.0f, 16.0f));
+    // trees.push_back(Tree(16.0f, 0.0f, -50.0f, 15.3f));
+    // trees.push_back(Tree(25.0f, 0.0f, -50.0f, 16.1f));
+    // trees.push_back(Tree(34.0f, 0.0f, -50.0f, 15.0f));
+    // trees.push_back(Tree(43.0f, 0.0f, -50.0f, 15.2f));
+    // trees.push_back(Tree(52.0f, 0.0f, -50.0f, 16.0f));
+    // trees.push_back(Tree(16.5f, 0.0f, -40.0f, 14.0f));
+    // trees.push_back(Tree(20.5f, 0.0f, -35.0f, 14.0f));
+    // trees.push_back(Tree(33.5f, 0.0f, -35.0f, 14.0f));
+    // trees.push_back(Tree(20.5f, 0.0f, -20.0f, 12.0f));
+    // Par 1: Extremos distantes
+    trees.push_back(Tree( 55.0f, 0.0f, -55.0f, 19.0f));
+    trees.push_back(Tree(-55.0f, 0.0f, -55.0f, 19.0f));
+
+    // Par 2: Preenchendo o fundo
+    trees.push_back(Tree( 35.0f, 0.0f, -60.0f, 17.5f));
+    trees.push_back(Tree(-35.0f, 0.0f, -60.0f, 17.5f));
+
+    // Par 3: Mais próximas do centro (mas atrás das torres)
+    trees.push_back(Tree( 12.0f, 0.0f, -65.0f, 18.0f));
+    trees.push_back(Tree(-12.0f, 0.0f, -65.0f, 18.0f));
+
+
+    // === CAMADA 2: CAMPO MÉDIO (Ao redor das Torres) ===
+    // Espalhadas entre Z -40 e -48
+    
+    // Par 4: Variação de tamanho
+    trees.push_back(Tree( 42.0f, 0.0f, -48.0f, 16.0f));
+    trees.push_back(Tree(-42.0f, 0.0f, -48.0f, 16.0f));
+
+    // Par 5: Quebrando a linearidade
+    trees.push_back(Tree( 22.0f, 0.0f, -42.0f, 15.0f));
+    trees.push_back(Tree(-22.0f, 0.0f, -42.0f, 15.0f));
+
+    // Par 6: Atrás das torres laterais
+    trees.push_back(Tree( 28.0f, 0.0f, -52.0f, 16.5f));
+    trees.push_back(Tree(-28.0f, 0.0f, -52.0f, 16.5f));
+
+
+    // === CAMADA 3: PRIMEIRO PLANO (Moldura) ===
+    // Mais perto da câmera (Z -25 a -35), mas bem abertas no X
+    // para não tapar as torres nem o pássaro.
+
+    // Par 7: Laterais próximas
+    trees.push_back(Tree( 45.0f, 0.0f, -30.0f, 14.5f));
+    trees.push_back(Tree(-45.0f, 0.0f, -30.0f, 14.5f));
+
+    // Par 8: O "limite" da tela
+    trees.push_back(Tree( 32.0f, 0.0f, -22.0f, 13.0f));
+    trees.push_back(Tree(-32.0f, 0.0f, -22.0f, 13.0f));
 }
 
 void drawSky() {
@@ -374,22 +453,23 @@ void drawGround() {
     
     glColor3f(0.3f, 0.6f, 0.3f);
     glBegin(GL_QUADS);
-    glVertex3f(-40.0f, 0.0f, -40.0f);
-    glVertex3f(-40.0f, 0.0f, 40.0f);
-    glVertex3f(40.0f, 0.0f, 40.0f);
-    glVertex3f(40.0f, 0.0f, -40.0f);
+    float tamanho = 60.0f;
+    glVertex3f(-tamanho, 0.0f, -tamanho);
+    glVertex3f(-tamanho, 0.0f, tamanho);
+    glVertex3f(tamanho, 0.0f, tamanho);
+    glVertex3f(tamanho, 0.0f, -tamanho);
     glEnd();
     
     glColor3f(0.25f, 0.5f, 0.25f);
     glLineWidth(1.0f);
     glBegin(GL_LINES);
-    for (float x = -40.0f; x <= 40.0f; x += 2.0f) {
-        glVertex3f(x, 0.01f, -40.0f);
-        glVertex3f(x, 0.01f, 40.0f);
+    for (float x = -tamanho; x <= tamanho; x += 2.0f) {
+        glVertex3f(x, 0.01f, -tamanho);
+        glVertex3f(x, 0.01f, tamanho);
     }
-    for (float z = -40.0f; z <= 40.0f; z += 2.0f) {
-        glVertex3f(-40.0f, 0.01f, z);
-        glVertex3f(40.0f, 0.01f, z);
+    for (float z = -tamanho; z <= tamanho; z += 2.0f) {
+        glVertex3f(-tamanho, 0.01f, z);
+        glVertex3f(tamanho, 0.01f, z);
     }
     glEnd();
     
@@ -778,19 +858,25 @@ void timer(int value) {
 
     float deltaTime = 1.0f / 60.0f;
 
+    // --- CORREÇÃO 1: TEMPO DE SEGURANÇA ---
+    // Variável estática para contar quanto tempo o jogo está rodando.
+    // Usada para impedir que a torre quebre sozinha enquanto se acomoda (settling).
+    static float tempoDecorrido = 0.0f;
+    tempoDecorrido += deltaTime;
+
     // Simula a física
     dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
     
+    // Atualiza lógica dos blocos
     for (auto& bloco : blocos) {
         bloco->update(deltaTime);
         bloco->clearContactFlag();
     }
 
-    // Atualiza a lógica do pássaro (tempo de vida, etc)
+    // Atualiza lógica do pássaro
     if (passaroAtual) {
         passaroAtual->atualizar(deltaTime);
         
-        // Se o pássaro atual "morreu" (foi desativado após o tempo de vida)
         if (!passaroAtual->isAtivo()) {
             proximoPassaro();
         }
@@ -798,117 +884,156 @@ void timer(int value) {
 
     g_particleManager.update(deltaTime);
 
-    //bloco adicionado para lidar com a colisao dos blocos e porcos
+    // ==========================================================
+    // === LÓGICA DE COLISÃO E DANO ===
+    // ==========================================================
     int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
     for (int i = 0; i < numManifolds; i++) {
         btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
         const btCollisionObject* obA = contactManifold->getBody0();
         const btCollisionObject* obB = contactManifold->getBody1();
 
-        // Tenta encontrar o pássaro, um bloco e um porco
-        BlocoDestrutivel* bloco = nullptr;
+        // Variáveis para identificar quem colidiu
+        BlocoDestrutivel* blocoA = nullptr;
+        BlocoDestrutivel* blocoB = nullptr;
         Porco* porco = nullptr;
         
+        // Procura se obA é um bloco
         for (auto& b : blocos) {
-            if (b->getRigidBody() == obA || b->getRigidBody() == obB) {
-                bloco = b;
-                break;
-            }
+            if (b->getRigidBody() == obA) { blocoA = b; break; }
+        }
+        // Procura se obB é um bloco
+        for (auto& b : blocos) {
+            if (b->getRigidBody() == obB) { blocoB = b; break; }
         }
 
+        // Procura porcos
         for (auto& p : porcos) {
             if (p->getRigidBody() == obA || p->getRigidBody() == obB) {
-                porco = p;
-                break;
+                porco = p; break;
             }
         }
         
+        // Verifica se o pássaro está na colisão
         bool passaroEnvolvido = passaroAtual && (obA == passaroAtual->getRigidBody() || obB == passaroAtual->getRigidBody());
 
-        // Se o pássaro colidiu com um bloco
-        if (bloco && passaroEnvolvido) {
-            float impulsoTotal = 0;
-            if (bloco->registerContact()){
-                bloco->clearContactFlag();
-            }
-            
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            
-            float dano = impulsoTotal * 0.1f; 
-            if (dano > 0.5f) { 
-                bloco->aplicarDano(dano);
+        // Calcula a força total da batida (Impulso)
+        float impulsoTotal = 0;
+        for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+            impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+        }
+
+        // --------------------------------------------------------
+        // CASO 1: BLOCO x BLOCO (Torre caindo sobre si mesma)
+        // --------------------------------------------------------
+        if (blocoA && blocoB) {
+            // Só processa após 2 segundos para evitar quebra no spawn
+            if (tempoDecorrido > 2.0f) {
+                // Impulso mínimo alto (3.0) para ignorar o peso de blocos parados
+                if (impulsoTotal > 3.0f) {
+                    // Dano reduzido (0.15) pois colisões entre blocos são frequentes
+                    float dano = impulsoTotal * 0.15f; 
+                    blocoA->aplicarDano(dano);
+                    blocoB->aplicarDano(dano);
+                }
             }
         }
 
-        bool blocoEnvolvido = (bloco != nullptr);
-        bool chaoEnvolvido = (obA == groundRigidBody || obB == groundRigidBody);
-
-        if (blocoEnvolvido && chaoEnvolvido) {
-            float impulsoTotal = 0;
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            float dano = impulsoTotal * 0.1f; 
-            if (dano > 0.5f) { 
-                bloco->aplicarDano(dano);
+        // --------------------------------------------------------
+        // CASO 2: BLOCO x PÁSSARO (Impacto direto)
+        // --------------------------------------------------------
+        else if ((blocoA || blocoB) && passaroEnvolvido) {
+            BlocoDestrutivel* alvo = (blocoA) ? blocoA : blocoB;
+            
+            // Dano quadrático (Energia cinética simulada)
+            float dano = (impulsoTotal * impulsoTotal) * 0.005f; 
+            
+            if (dano > 1.2f) { 
+                alvo->aplicarDano(dano);
             }
         }
 
-        // Lógica de dano para Porcos (Qualquer impacto forte: pássaro, chão, blocos)
+        // --------------------------------------------------------
+        // CASO 3: BLOCO x CHÃO (Queda)
+        // --------------------------------------------------------
+        else if ((blocoA || blocoB) && (obA == groundRigidBody || obB == groundRigidBody)) {
+            // Só processa após 2 segundos
+            if (tempoDecorrido > 2.0f) {
+                BlocoDestrutivel* alvo = (blocoA) ? blocoA : blocoB;
+                
+                // Verifica se houve impacto real (não apenas estar encostado)
+                if (impulsoTotal > 1.0f) {
+                    btVector3 vel = alvo->getRigidBody()->getLinearVelocity();
+                    
+                    // CORREÇÃO CRUCIAL: Usa apenas a velocidade vertical (Y) invertida.
+                    // Se o bloco deslizar de lado (X/Z), ele não quebra. Só quebra se cair (Y).
+                    float velocidadeQueda = -vel.getY(); 
+
+                    if (velocidadeQueda > 5.0f) { 
+                        float dano = velocidadeQueda * 3.0f; // Multiplicador para converter velocidade em dano
+                        alvo->aplicarDano(dano);
+                    }
+                }
+            }
+        }
+
+        // --------------------------------------------------------
+        // CASO 4: PORCOS (Dano genérico por impacto)
+        // --------------------------------------------------------
         if (porco) {
-            float impulsoTotal = 0;
-            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-            }
-            
-            // Calcula dano baseado no impulso
-            float dano = impulsoTotal * 0.2f; 
-            
-            // Se o impacto for forte o suficiente, aplica dano
-            if (dano > 1.0f) {
-                porco->tomarDano(dano);
+            // Proteção de tempo opcional para os porcos também
+            if (tempoDecorrido > 1.0f && impulsoTotal > 1.5f) {
+                porco->tomarDano(impulsoTotal * 0.2f);
             }
         }
     }
 
-    // 2. Limpa blocos destruídos
+    // ==========================================================
+    // === LIMPEZA E PONTUAÇÃO ===
+    // ==========================================================
+
+    // 1. Remove blocos destruídos da memória e do mundo
     for (int i = blocos.size() - 1; i >= 0; i--) {
         if (blocos[i]->isDestruido()) {
             blocos[i]->limparFisica(dynamicsWorld);
             delete blocos[i];
             blocos.erase(blocos.begin() + i);
-            // score += blocos[i]->getPontuacao(); // Adiciona pontuação
+            // score += 50; // Opcional: Pontos por destruir blocos
         }
     }
 
-    // Atualiza a física do estilingue (ex: malha voltando)
+    // 2. Atualiza o estilingue
     if (g_slingshotManager) {
         g_slingshotManager->update();
     }
     
-    // Lógica de pontuação (sem alterações)
+    // 3. Remove objetos que caíram do mundo (Abismo) e dá pontos
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
         btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
         btRigidBody* body = btRigidBody::upcast(obj);
         
-        if (body && body->getCollisionShape() == boxShape) {
+        if (body && body->getCollisionShape() == boxShape) { // Assume que boxShape são os blocos/porcos
             btTransform trans;
             body->getMotionState()->getWorldTransform(trans);
             float y = trans.getOrigin().getY();
             
+            // Se caiu muito abaixo do chão
             if (y < -2.0f) {
                 score += 100;
                 
+                // Remove da lista de alvos do pássaro (se houver essa lógica)
                 auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
                 if (it != targetBodies.end()) {
                     targetBodies.erase(it);
                 }
                 
+                // Remove do mundo físico
                 dynamicsWorld->removeRigidBody(body);
                 delete body->getMotionState();
                 delete body;
+                
+                // Nota: O ponteiro na lista 'blocos' ficará inválido aqui se não for tratado.
+                // O ideal é que a limpeza acima (isDestruido) trate disso, ou marcar o bloco como destruído aqui.
             }
         }
     }
@@ -962,10 +1087,10 @@ void init() {
     // 4. Carregar modelo da árvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     const char* possiblePaths[] = {
-        "Objetos/arvore.obj",
-        "./Objetos/arvore.obj",
-        "../Objetos/arvore.obj",
-        "arvore.obj",
+        "Objetos/arvore2.obj",
+        "./Objetos/arvore2.obj",
+        "../Objetos/arvore2.obj",
+        "arvore2.obj",
         "tree.obj"
     };
     treeModelLoaded = false;
@@ -1052,7 +1177,7 @@ int main(int argc, char** argv) {
     if (!g_audioManager.initAudio()) {
         printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
     }
-    
+    g_audioManager.setVolume(10.0f);
     // Configura os callbacks do GLUT
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);

@@ -571,7 +571,7 @@ void SlingshotManager::drawCylinder(float x1, float y1, float z1, float x2, floa
  * @brief Desenha a base de madeira usando a função drawCylinder.
  */
 void SlingshotManager::drawWoodenBase() {
-    glColor3f(0.5f, 0.35f, 0.05f); // Cor de madeira
+    glColor3f(0.30f, 0.18f, 0.06f); // Cor de madeira
     
     // Desenha o cabo (da base até o centro da forquilha)
     drawCylinder(handleBaseX, handleBaseY, handleBaseZ,
@@ -643,7 +643,7 @@ void SlingshotManager::drawAimLine() {
         );
 
         // --- 3. Desenhar a Parábola ---
-        glColor4f(1.0f, 1.0f, 1.0f, 0.8f); // Amarelo translúcido
+        glColor4f(1.0f, 1.0f, 1.0f, 0.8f); 
         glLineWidth(3.0f);
         
         // Ativa o "pontilhado" da linha

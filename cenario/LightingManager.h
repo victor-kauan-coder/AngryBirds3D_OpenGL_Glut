@@ -8,7 +8,7 @@ private:
     // Usamos os valores que você ajustou anteriormente (mais claro, sem brilho excessivo)
     GLfloat lightAmb[4] = {0.8f, 0.8f, 0.8f, 1.0f};  // Luz ambiente forte
     GLfloat lightDif[4] = {1.0f, 1.0f, 1.0f, 1.0f};  // Luz difusa branca
-    GLfloat lightSpec[4] = {0.0f, 0.0f, 0.0f, 1.0f}; // Sem brilho especular (fosco)
+    GLfloat lightSpec[4] = {0.5f, 0.5f, 0.5f, 1.0f}; // Sem brilho especular (fosco)
     
     // Posição da luz (X, Y, Z, W)
     // W = 1.0f indica uma luz posicional (lâmpada/sol)
@@ -35,7 +35,7 @@ public:
         glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
         
         // Configura brilho padrão dos materiais
-        GLfloat matSpec[] = {0.3f, 0.3f, 0.3f, 1.0f};
+        GLfloat matSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
         glMaterialfv(GL_FRONT, GL_SPECULAR, matSpec);
         glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
     }
