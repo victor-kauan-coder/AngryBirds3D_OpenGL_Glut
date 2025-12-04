@@ -41,6 +41,10 @@ private:
     int* shotsRemainingRef;
     bool* isGameOverRef;
 
+    // --- Dano e Colisão do Estilingue ---
+    int damageCount;
+    btRigidBody* slingshotBody; // Corpo físico do estilingue para colisões
+
     // --- Funções Internas (Privadas) ---
     void clearProjectile();
     void createProjectileInPouch();
@@ -52,6 +56,8 @@ private:
     void updateElasticReturnPhysics();
     void updatePouchPosition();
     void screenToWorld(int screenX, int screenY, float depth, float& worldX, float& worldY, float& worldZ);
+    void triggerGameOver(); // Chama o Game Over quando o estilingue quebra
+    void drawCracks();      // Desenha rachaduras baseadas no dano
 
 public:
     /**
@@ -125,6 +131,16 @@ public:
      * @brief Obtém a posição atual da malha do estilingue.
      */
     void getPouchPosition(float& x, float& y, float& z) const;
+
+    /**
+     * @brief Aplica dano ao estilingue (chamado na colisão com porcos).
+     */
+    void takeDamage();
+
+    /**
+     * @brief Retorna o corpo rígido do estilingue para verificação de colisão.
+     */
+    btRigidBody* getRigidBody() const;
 };
 
 #endif // SLINGSHOTMANAGER_H

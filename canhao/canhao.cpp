@@ -19,11 +19,11 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
     // Load cannon model
     // Note: The path is relative to the executable or working directory.
     // Assuming "Objetos/" is in the working directory.
-    if (!carregarModelo("Objetos/canhao.obj")) {
-        std::cout << "Erro ao carregar modelo do canhao (Objetos/canhao.obj)" << std::endl;
+    if (!carregarModelo("Objetos/conhao.obj")) {
+        std::cout << "Erro ao carregar modelo do canhao (Objetos/conhao.obj)" << std::endl;
     }
-    if (!carregarMTL("Objetos/canhao.mtl")) {
-        std::cout << "Erro ao carregar textura do canhao (Objetos/canhao.mtl)" << std::endl;
+    if (!carregarMTL("Objetos/conhao.mtl")) {
+        std::cout << "Erro ao carregar textura do canhao (Objetos/conhao.mtl)" << std::endl;
     }
     
     // Initialize physics with a box shape
@@ -117,7 +117,7 @@ void Cannon::shoot() {
     projectile->setVida(1.0f); // 1 HP as requested
     
     // Apply impulse
-    float force = 50.0f; // Adjust power as needed
+    float force = 100.0f; // Adjust power as needed
     // Add some upward arc
     btVector3 impulse = direction * force + btVector3(0, 8.0f, 0);
     projectile->getRigidBody()->applyCentralImpulse(impulse);

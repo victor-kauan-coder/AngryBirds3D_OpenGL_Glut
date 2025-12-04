@@ -15,6 +15,7 @@
 #include "passaros/Red.h"
 #include "passaros/chuck.h"
 #include "passaros/bomb.h"
+#include "passaros/blue.h"
 #include "blocos/BlocoDestrutivel.h"
 #include "porcos/porco.h"
 #include "estilingue/SlingshotManager.h"
@@ -31,6 +32,9 @@
 // --- Includes de Áudio (exemplo) ---
 // (espaço para seus includes de áudio)
 extern AudioManager g_audioManager;
+
+// Vetor para pássaros extras (habilidade do Blue)
+std::vector<Passaro*> extraBirds;
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
@@ -230,7 +234,47 @@ GLuint loadGlobalTexture(const char* filename) {
     return textureID;
 }
 
+void cleanupBullet() {
+    // Limpa pássaros extras
+    for (auto* bird : extraBirds) {
+        delete bird;
+    }
+    extraBirds.clear();
+
+    // Limpa o mundo Bullet antigo para evitar vazamentos e referências inválidas
+    if (dynamicsWorld) {
+        // Remove todos os objetos
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
+            if (body && body->getMotionState()) {
+                delete body->getMotionState();
+            }
+            dynamicsWorld->removeCollisionObject(obj);
+            delete obj;
+        }
+        delete dynamicsWorld;
+        dynamicsWorld = nullptr;
+    }
+    if (solver) { delete solver; solver = nullptr; }
+    if (dispatcher) { delete dispatcher; dispatcher = nullptr; }
+    if (collisionConfiguration) { delete collisionConfiguration; collisionConfiguration = nullptr; }
+    if (broadphase) { delete broadphase; broadphase = nullptr; }
+    
+    collisionShapes.clear();
+    targetBodies.clear();
+    // groundRigidBody, projectileShape, boxShape são deletados no loop de objetos ou limpos acima
+    groundRigidBody = nullptr;
+    projectileShape = nullptr;
+    boxShape = nullptr;
+}
+
 void initBullet() {
+    // Garante que está limpo antes de iniciar
+    if (dynamicsWorld) {
+        cleanupBullet();
+    }
+
     // 1. Inicialização do Mundo Físico
     broadphase = new btDbvtBroadphase();
     collisionConfiguration = new btDefaultCollisionConfiguration();
@@ -269,27 +313,8 @@ void initBullet() {
     // ==========================================
 
     // --- Criando Porcos ---
-    // Adiciona alguns porcos em cima dos blocos ou entre eles
-    for (int i = 1; i < numBlocos; i += 3) {
-        float posX = startX + (i * espacamentoX);
-        // Cria o porco
-        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
-        // Inicializa a física (colocando em cima do bloco)
-        // Y_NIVEL1 é o centro do bloco. Altura total é blockH. Topo é Y_NIVEL1 + blockH/2
-        float yTopoBloco = Y_NIVEL1 + (blockH / 2.0f) + 0.5f; 
-        porco->inicializarFisica(dynamicsWorld, centroParede.x() + posX, yTopoBloco, centroParede.z());
-        porcos.push_back(porco);
-    }
+    // (Movido para depois da construção da fortaleza para usar as coordenadas corretas)
 
-    // Cria um canhão ao lado do primeiro porco (no topo do bloco vizinho)
-    // O primeiro porco está no bloco i=1. Vamos colocar o canhão no bloco i=2.
-    float posBlocoVizinhoX = startX + (2 * espacamentoX);
-    // Y_NIVEL1 é o centro do bloco. Altura total é blockH. Topo é Y_NIVEL1 + blockH/2
-    float yTopoBloco = Y_NIVEL1 + (blockH / 2.0f) + 0.5f; 
-    
-    // O construtor do Cannon já inicializa a física
-    Cannon* cannon = new Cannon(centroParede.x() + posBlocoVizinhoX, yTopoBloco, centroParede.z(), dynamicsWorld, btVector3(0.0f, 3.0f, 12.0f));
-    cannons.push_back(cannon);
 
     // NÍVEL 3: Teto (Gelo - Placa)
     // NÍVEL 3: Teto (Gelo - Placa)
@@ -398,6 +423,39 @@ void initBullet() {
     // Teto 3
     blocos.push_back(new BlocoDestrutivel(MaterialTipo::PEDRA, pathPlaca, tetoW_Andar3, tetoH, tetoD));
     blocos.back()->inicializarFisica(dynamicsWorld, centro + btVector3(0, yTeto3, 0), rot);
+
+    // --- Criando Porcos e Canhões (Posicionados na Fortaleza) ---
+    
+    // Porco no Teto 1 (Esquerda)
+    {
+        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
+        float yPos = yTeto1 + (tetoH / 2.0f) + 0.5f;
+        porco->inicializarFisica(dynamicsWorld, centro.x() - 1.5f, yPos, centro.z());
+        porcos.push_back(porco);
+    }
+
+    // Porco no Teto 2 (Centro)
+    {
+        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
+        float yPos = yTeto2 + (tetoH / 2.0f) + 0.5f;
+        porco->inicializarFisica(dynamicsWorld, centro.x(), yPos, centro.z());
+        porcos.push_back(porco);
+    }
+
+    // Porco no Teto 3 (Topo)
+    {
+        Porco* porco = new Porco(0.0f, 0.0f, 0.0f);
+        float yPos = yTeto3 + (tetoH / 2.0f) + 0.5f;
+        porco->inicializarFisica(dynamicsWorld, centro.x(), yPos, centro.z());
+        porcos.push_back(porco);
+    }
+
+    // Canhão no Teto 1 (Direita)
+    {
+        float yPos = yTeto1 + (tetoH / 2.0f) + 0.5f;
+        Cannon* cannon = new Cannon(centro.x() + 1.5f, yPos, centro.z(), dynamicsWorld, btVector3(0.0f, 3.0f, 12.0f));
+        cannons.push_back(cannon);
+    }
 
     // --- ÁRVORES ---
     trees.clear();
@@ -653,36 +711,33 @@ void keyboard(unsigned char key, int x, int y) {
             shotsRemaining = 8;
             gameOver = false;
             
-            // Limpa os corpos dinâmicos (caixas, pássaros)
-            for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-                btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-                btRigidBody* body = btRigidBody::upcast(obj);
-                
-                if (body && body->getInvMass() != 0) {
-                    dynamicsWorld->removeRigidBody(body);
-                    delete body->getMotionState();
-                    delete body;
-                }
-            }
-            
-            // Recria o mundo, caixas e árvores
-            initBullet(); 
-            
-            
-            // Reseta o estado do estilingue
-            if (g_slingshotManager) {
-                g_slingshotManager->reset();
-            }
-            
-            // Recria o pássaro 'red' (seu ponteiro foi limpo em clearProjectile)
-            // A inicialização em initBullet já limpa o 'red'
-            // Mas o 'red' em si precisa ser resetado
-            if(passaroAtual) {
-                passaroAtual->resetar(0,0,0); // Posição inicial
+            // Limpa a física do pássaro atual (pois pertence ao mundo antigo)
+            if (passaroAtual) {
+                passaroAtual->limparFisica();
+                passaroAtual->resetar(0,0,0);
             }
 
-                printf("Jogo reiniciado!\n");
-                break;
+            // Recria o mundo (cleanupBullet é chamado dentro de initBullet se necessário, 
+            // mas aqui chamamos initBullet que agora gerencia isso)
+            initBullet(); 
+            
+            // Recria o SlingshotManager para usar o NOVO mundo
+            if (g_slingshotManager) {
+                delete g_slingshotManager;
+                g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
+            }
+            
+            // Reseta o pássaro atual para garantir que ele crie física no novo mundo se necessário
+            // (Na verdade, o SlingshotManager vai cuidar disso quando setProjectile for chamado ou no update)
+            if(passaroAtual) {
+                // passaroAtual->resetar(0,0,0); // Já chamado acima
+                if (g_slingshotManager) {
+                    g_slingshotManager->setProjectile(passaroAtual);
+                }
+            }
+
+            printf("Jogo reiniciado!\n");
+            break;
         }
     }
 }
@@ -756,6 +811,8 @@ glEnable(GL_LIGHTING); //
     
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmb);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDif);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, lightSpec);
     // --- Renderização da Cena ---
     
     drawGround();
@@ -782,6 +839,13 @@ glEnable(GL_LIGHTING); //
             float px, py, pz;
             g_slingshotManager->getPouchPosition(px, py, pz);
             passaroAtual->desenharEmPosicao(px, py, pz);
+        }
+    }
+
+    // Desenha pássaros extras (Blue clones)
+    for (auto* bird : extraBirds) {
+        if (bird->isAtivo()) {
+            bird->desenhar();
         }
     }
     
@@ -885,6 +949,19 @@ void timer(int value) {
 
     float deltaTime = 1.0f / 60.0f;
 
+    // DEBUG: Verifica se o estilingue está no mundo físico
+    static bool checkedSling = false;
+    if (!checkedSling && g_slingshotManager && dynamicsWorld) {
+        btRigidBody* sb = g_slingshotManager->getRigidBody();
+        bool found = false;
+        for(int i=0; i<dynamicsWorld->getNumCollisionObjects(); i++) {
+            if(dynamicsWorld->getCollisionObjectArray()[i] == sb) found = true;
+        }
+        if(!found) printf("ALERTA CRITICO: SlingshotBody NAO esta no dynamicsWorld!\n");
+        else printf("INFO: SlingshotBody verificado e presente no dynamicsWorld.\n");
+        checkedSling = true;
+    }
+
     // Simula a física
     dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
     
@@ -902,6 +979,18 @@ void timer(int value) {
             proximoPassaro();
         }
     }
+
+    // Atualiza pássaros extras (Blue clones)
+    for (auto it = extraBirds.begin(); it != extraBirds.end(); ) {
+        (*it)->atualizar(deltaTime);
+        if (!(*it)->isAtivo()) {
+            delete *it;
+            it = extraBirds.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     for (auto& porco : porcos) {
         porco->atualizar(deltaTime);
     }
@@ -936,8 +1025,55 @@ void timer(int value) {
                 break;
             }
         }
-        
+
+        // --- NOVA LÓGICA: Colisão Porco x Estilingue ---
+        if (g_slingshotManager) {
+            btRigidBody* slingshotBody = g_slingshotManager->getRigidBody();
+            
+            // Verifica se o estilingue está envolvido na colisão
+            if (slingshotBody && (obA == slingshotBody || obB == slingshotBody)) {
+                
+                // Identifica o outro objeto
+                const btCollisionObject* otherOb = (obA == slingshotBody) ? obB : obA;
+                
+                // Verifica se o outro objeto é um porco
+                Porco* porcoColidindo = nullptr;
+                for (auto& p : porcos) {
+                    if (p->getRigidBody() == otherOb) {
+                        porcoColidindo = p;
+                        break;
+                    }
+                }
+
+                if (porcoColidindo) {
+                    // printf("!!! COLISAO CONFIRMADA: Porco x Estilingue !!!\n");
+                    
+                    float impulsoTotal = 0;
+                    for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                        impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+                    }
+                    
+                    // Se houve impacto real (threshold baixo)
+                    if (impulsoTotal > 0.1f) { 
+                        g_slingshotManager->takeDamage();
+                        porcoColidindo->tomarDano(500.0f); 
+                        contactManifold->clearManifold();
+                    }
+                }
+            }
+        }
+                    
         bool passaroEnvolvido = passaroAtual && (obA == passaroAtual->getRigidBody() || obB == passaroAtual->getRigidBody());
+        
+        // Verifica também os pássaros extras (Blue clones)
+        if (!passaroEnvolvido) {
+            for (auto* bird : extraBirds) {
+                if (bird->isAtivo() && (obA == bird->getRigidBody() || obB == bird->getRigidBody())) {
+                    passaroEnvolvido = true;
+                    break;
+                }
+            }
+        }
 
         // Se o pássaro colidiu com um bloco
         if (bloco && passaroEnvolvido) {
@@ -1157,6 +1293,7 @@ int main(int argc, char** argv) {
         filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
         filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
         filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
+        filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
     }
 
     // Inicializa o iterador e o primeiro pássaro
