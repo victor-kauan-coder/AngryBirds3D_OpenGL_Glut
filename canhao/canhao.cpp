@@ -38,7 +38,7 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
         float yaw = atan2(dir.x(), dir.z());
         
         // Ajuste de rotação:
-        // Adicionamos M_PI (180 graus) para rotacionar o modelo (que aponta para -Z ou +Z)
+        // Adicionamos M_PI/2 (90 graus) para rotacionar o modelo (que aponta para -Z ou +Z)
         // para a direção correta.
         btQuaternion rotation(btVector3(0, 1, 0), M_PI/2); 
         
