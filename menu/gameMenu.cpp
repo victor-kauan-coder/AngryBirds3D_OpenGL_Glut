@@ -10,7 +10,7 @@ extern AudioManager g_audioManager;
 
 GameMenu::GameMenu(int width, int height) {
     updateDimensions(width, height);
-    currentVolume = 50.0f; 
+    currentVolume = 20.0f; 
     
     volSlider.value = 0.5f; 
     volSlider.isDragging = false;

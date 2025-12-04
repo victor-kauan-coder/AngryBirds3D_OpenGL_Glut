@@ -11,8 +11,8 @@
 class PassaroBomb : public Passaro {
 public:
     // Parâmetros da explosão (fáceis de manipular)
-    float raioExplosao = 7.5f;
-    float forcaExplosao = 100.0f;
+    float raioExplosao = 10.0f;
+    float forcaExplosao = 250.0f;
 
     PassaroBomb(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f)
         : Passaro(posX, posY, posZ, 1.2f, 1.2f) {

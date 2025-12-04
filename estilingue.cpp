@@ -17,10 +17,18 @@
 #include "passaros/bomb.h"
 #include "blocos/BlocoDestrutivel.h"
 #include "porcos/porco.h"
+//manager do estilingue
 #include "estilingue/SlingshotManager.h"
+//manager das particulas
 #include "blocos/ParticleManager.h"
+//manager do audio
 #include "controle_audio/audio_manager.h"
+//menu inicial 
 #include "menu/gameMenu.h"
+//elementos do cenario
+#include "cenario/Tree.h"
+//manager da iluminação 
+#include "cenario/LightingManager.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -57,73 +65,15 @@ GameState g_currentState = STATE_MENU;
 
 
 GLuint g_skyTextureID = 0;
-// --- Classe Tree (sem alterações) ---
-class Tree {
-public:
-    float x, y, z;
-    float scale;
-    float rotation;
-    
-    Tree(float posX, float posY, float posZ, float s = 1.0f) 
-        : x(posX), y(posY), z(posZ), scale(s) {
-        rotation = (rand() % 360);
-    }
-    
-    void draw() {
-        glPushMatrix();
-        glTranslatef(x, y, z);
-        glRotatef(rotation, 0, 1, 0);
-        glScalef(scale, scale, scale);
-        
-        if (treeModelLoaded) {
-            // glColor3f(0.3f, 0.5f, 0.2f);
-            glEnable(GL_LIGHTING);
-            glDisable(GL_COLOR_MATERIAL);
-            glPushMatrix();
-            glTranslatef(0.0f, 0.3f, 0.0f);
-            treeModel.draw();
-            glPopMatrix();
-            glEnable(GL_COLOR_MATERIAL);
-        } else {
-            drawProceduralTree();
-        }
-        
-        glPopMatrix();
-    }
-    
-private:
-    void drawProceduralTree() {
-        float height = 4.0f;
-        float trunkRadius = 0.2f;
-        float foliageRadius = 1.0f;
-        
-        glColor3f(0.4f, 0.25f, 0.1f);
-        glRotatef(-90, 1, 0, 0);
-        GLUquadric* trunk = gluNewQuadric();
-        gluCylinder(trunk, trunkRadius, trunkRadius * 0.8f, height * 0.6f, 8, 8);
-        gluDeleteQuadric(trunk);
-        glRotatef(90, 1, 0, 0);
-        
-        glColor3f(0.2f, 0.5f, 0.2f);
-        glTranslatef(0, height * 0.5f, 0);
-        glutSolidSphere(foliageRadius, 12, 12);
-        glTranslatef(0, height * 0.1f, 0);
-        glColor3f(0.25f, 0.55f, 0.25f);
-        glutSolidSphere(foliageRadius * 0.9f, 12, 12);
-        glTranslatef(0, height * 0.1f, 0);
-        glColor3f(0.3f, 0.6f, 0.3f);
-        glutSolidSphere(foliageRadius * 0.7f, 10, 10);
-    }
-};
+
+//vetor para armazenar as arvores 
 std::vector<Tree> trees;
-
-
 // --- Variáveis Globais ---
-SlingshotManager* g_slingshotManager = nullptr; // Ponteiro para o gerenciador
-
+SlingshotManager* g_slingshotManager = nullptr; // ponteiro para o gerenciador do estilingue
+LightingManager g_lightingManager; //manager da iluuminação
 // Variáveis globais de câmera e jogo
-float cameraAngleH = 45.0f;
-float cameraAngleV = 20.0f;
+float cameraAngleH = 0.0f;
+float cameraAngleV = 15.0f;
 float cameraDistance = 28.0f;
 float cameraTargetY = 3.0f;
 
@@ -703,27 +653,8 @@ void display() {
               0.0f, cameraTargetY, -8.0f,
               0.0f, 1.0f, 0.0f);
     
-    // Configuração da Luz
-glEnable(GL_LIGHTING); //
-    glEnable(GL_LIGHT0);
-    
-    GLfloat lightPos[] = {10.0f, 15.0f, 10.0f, 1.0f};
-    
-    // MUDE ISTO (Deixa as sombras mais claras):
-    // DE: GLfloat lightAmb[] = {0.4f, 0.4f, 0.4f, 1.0f};
-    GLfloat lightAmb[] = {0.8f, 0.8f, 0.8f, 1.0f};
-
-    // MUDE ISTO (Mantém a luz principal clara):
-    // DE: GLfloat lightDif[] = {1.0f, 1.0f, 0.9f, 1.0f};
-    GLfloat lightDif[] = {1.0f, 1.0f, 1.0f, 1.0f};
-
-    // MUDE ISTO (Remove o brilho "realista"):
-    // DE: GLfloat lightSpec[] = {0.8f, 0.8f, 0.8f, 1.0f};
-    GLfloat lightSpec[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    
-    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
-    glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmb);
-    // --- Renderização da Cena ---
+    //aplicando a iluminação          
+    g_lightingManager.apply();
     
     drawGround();
     
@@ -1003,16 +934,10 @@ void init() {
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
+    glEnable(GL_NORMALIZE);
     glClearColor(0.7f, 0.85f, 0.95f, 1.0f);
     
-    glEnable(GL_COLOR_MATERIAL);
-    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
-    
-    GLfloat spec[] = {0.3f, 0.3f, 0.3f, 1.0f};
-    glMaterialfv(GL_FRONT, GL_SPECULAR, spec);
-    glMaterialf(GL_FRONT, GL_SHININESS, 20.0f);
-    
+    g_lightingManager.init();
 
     g_skyTextureID = loadGlobalTexture("Objetos/texturas/fundo_ceu_borrado.png"); 
     if (g_skyTextureID == 0) {
@@ -1037,11 +962,11 @@ void init() {
     // 4. Carregar modelo da árvore
     printf("\nTentando carregar modelo OBJ da arvore...\n");
     const char* possiblePaths[] = {
-        "Objetos/arvore2.obj",
-        "./Objetos/arvore2.obj",
-        "../Objetos/arvore2.obj",
-        "arvore2.obj",
-        "tree3.obj"
+        "Objetos/arvore.obj",
+        "./Objetos/arvore.obj",
+        "../Objetos/arvore.obj",
+        "arvore.obj",
+        "tree.obj"
     };
     treeModelLoaded = false;
     for (const char* path : possiblePaths) {
