@@ -55,6 +55,7 @@ public:
     
     // Getters e Setters
     btVector3 getPosicao() const;
+    btVector3 getVelocidade() const;
     bool isAtivo() const { return ativo; }
     void setAtivo(bool valor) { ativo = valor; }
     float getVida() const { return vida; }
