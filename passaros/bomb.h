@@ -46,6 +46,22 @@ public:
         
         glPopMatrix();
     }
+
+    void desenharEmPosicao(float x, float y, float z) override {
+        Passaro::desenharEmPosicao(x, y, z);
+
+        // Desenha o raio de explosão para debug (mesmo no estilingue)
+        glPushMatrix();
+        glTranslatef(x, y, z);
+        
+        // Cor vermelha para o raio de explosão
+        glColor3f(1.0f, 0.0f, 0.0f); 
+        glDisable(GL_LIGHTING); 
+        glutWireSphere(raioExplosao, 20, 20);
+        glEnable(GL_LIGHTING);
+        
+        glPopMatrix();
+    }
     
     void usarHabilidade() override {
         if (!isEmVoo()) return;

@@ -201,7 +201,7 @@ public:
     /**
      * Desenha o pássaro em uma posição específica (sem depender do RigidBody)
      */
-    void desenharEmPosicao(float x, float y, float z) {
+    virtual void desenharEmPosicao(float x, float y, float z) {
         glPushMatrix();
         glTranslatef(x, y, z);
         

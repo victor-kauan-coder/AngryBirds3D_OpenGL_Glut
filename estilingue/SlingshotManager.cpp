@@ -39,7 +39,9 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
       grabPouchStartX(0),        
       grabPouchStartY(0),
       grabPouchStartZ(0),
-      pouchPullDepthZ(0.0f)      
+      pouchPullDepthZ(0.0f),
+      damageCount(0),
+      slingshotBody(nullptr)
 {
     initGeometry();
 }
@@ -85,6 +87,35 @@ void SlingshotManager::initGeometry() {
     pouchPositionX = (leftForkTipX + rightForkTipX) / 2.0f;
     pouchPositionY = (leftForkTipY + rightForkTipY) / 2.0f;
     pouchPositionZ = (leftForkTipZ + rightForkTipZ) / 2.0f;
+
+    // --- Criação do Corpo Físico do Estilingue (Para Colisões) ---
+    // Cria uma caixa estática que envolve a base e os braços do estilingue
+    // Posição: (0, 2.5, 12) - Centro aproximado
+    // Tamanho: (1.5, 2.5, 0.5) - Half extents (largura total 3, altura 5, prof 1)
+    btCollisionShape* shape = new btBoxShape(btVector3(1.0f, 2.5f, 0.5f));
+    
+    btTransform transform;
+    transform.setIdentity();
+    transform.setOrigin(btVector3(0.0f, 2.5f, slingshotPosZ));
+    
+    btDefaultMotionState* motionState = new btDefaultMotionState(transform);
+    btRigidBody::btRigidBodyConstructionInfo rbInfo(0.0f, motionState, shape, btVector3(0,0,0)); // Massa 0 = Estático
+    
+    slingshotBody = new btRigidBody(rbInfo);
+    slingshotBody->setRestitution(0.5f);
+    slingshotBody->setFriction(0.8f);
+    
+    // Força o objeto a ser Kinematic (Animado/Estático mas sempre ativo) para garantir detecção
+    slingshotBody->setCollisionFlags(slingshotBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+    slingshotBody->setActivationState(DISABLE_DEACTIVATION);
+
+    // Adiciona ao mundo
+    if (worldRef) {
+        worldRef->addRigidBody(slingshotBody);
+        printf("DEBUG: SlingshotBody CRIADO e ADICIONADO ao mundo %p. Body: %p\n", worldRef, slingshotBody);
+    } else {
+        printf("ERRO CRITICO: SlingshotManager criado sem worldRef!\n");
+    }
 }
 
 /**
@@ -310,6 +341,9 @@ void SlingshotManager::reset() {
     isBeingPulled = false;
     isPouchGrabbed = false;
     pouchPullDepthZ = 0.0f;
+    
+    // Reseta dano
+    damageCount = 0;
 }
 
 /**
@@ -457,6 +491,12 @@ void SlingshotManager::createProjectileInPouch() {
         return;
     }
     
+    // --- NOVA LÓGICA: Ignorar colisão entre Pássaro e Estilingue ---
+    if (slingshotBody) {
+        projectileInPouch->setIgnoreCollisionCheck(slingshotBody, true);
+        slingshotBody->setIgnoreCollisionCheck(projectileInPouch, true);
+    }
+
     // 4. Define o corpo como CINEMÁTICO (controlado por nós, não pelo Bullet)
     projectileInPouch->setCollisionFlags(projectileInPouch->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
     projectileInPouch->setActivationState(DISABLE_DEACTIVATION); // Impede de "dormir"
@@ -508,6 +548,9 @@ void SlingshotManager::launchProjectile() {
     // 5. Avisa a classe Passaro que ela está em voo (baseado no README)
     projectileRef->setEmVoo(true);
     
+    // Toca som de lançamento
+    g_audioManager.play(SomTipo::LANCAMENTO_PASSARO);
+
     // O projétil foi lançado. Ele não está mais "na nossa malha".
     projectileInPouch = nullptr; 
     
@@ -587,6 +630,11 @@ void SlingshotManager::drawWoodenBase() {
     drawCylinder(rightArmBaseX, rightArmBaseY, rightArmBaseZ,
                  rightForkTipX, rightForkTipY, rightForkTipZ,
                  0.2); // Raio de 0.2
+
+    // Desenha rachaduras se houver dano
+    if (damageCount > 0) {
+        drawCracks();
+    }
 }
 
 /**
@@ -824,4 +872,65 @@ void SlingshotManager::screenToWorld(int screenX, int screenY, float depth, floa
     worldX = posX;
     worldY = posY;
     worldZ = posZ;
+}
+
+void SlingshotManager::takeDamage() {
+    damageCount++;
+    printf("Estilingue atingido! Dano: %d/3\n", damageCount);
+    
+    // Toca som de madeira quebrando/colisão
+    g_audioManager.play(SomTipo::COLISAO_MADEIRA);
+    
+    if (damageCount >= 3) {
+        triggerGameOver();
+    }
+}
+
+void SlingshotManager::triggerGameOver() {
+    printf("GAME OVER: Estilingue destruido!\n");
+    if (isGameOverRef) {
+        *isGameOverRef = true;
+    }
+    // Opcional: Tocar som de destruição total
+    g_audioManager.play(SomTipo::BLOCO_MADEIRA_DESTRUIDO);
+}
+
+btRigidBody* SlingshotManager::getRigidBody() const {
+    return slingshotBody;
+}
+
+void SlingshotManager::drawCracks() {
+    glDisable(GL_LIGHTING);
+    glColor3f(0.0f, 0.0f, 0.0f); // Preto para as rachaduras
+    glLineWidth(2.0f);
+
+    // Rachaduras simples (linhas aleatórias pré-definidas)
+    glBegin(GL_LINES);
+    
+    if (damageCount >= 1) {
+        // Rachadura no cabo
+        glVertex3f(handleBaseX - 0.2f, handleBaseY + 1.0f, handleBaseZ + 0.4f);
+        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
+        
+        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
+        glVertex3f(handleBaseX - 0.1f, handleBaseY + 2.0f, handleBaseZ + 0.4f);
+    }
+    
+    if (damageCount >= 2) {
+        // Rachadura no braço esquerdo
+        glVertex3f(leftArmBaseX, leftArmBaseY + 0.5f, leftArmBaseZ + 0.3f);
+        glVertex3f(leftArmBaseX - 0.3f, leftArmBaseY + 1.5f, leftArmBaseZ + 0.3f);
+    }
+    
+    if (damageCount >= 3) {
+        // Rachadura no braço direito (crítica)
+        glVertex3f(rightArmBaseX, rightArmBaseY + 0.5f, rightArmBaseZ + 0.3f);
+        glVertex3f(rightArmBaseX + 0.3f, rightArmBaseY + 1.5f, rightArmBaseZ + 0.3f);
+        
+        glVertex3f(handleBaseX, handleBaseY + 2.5f, handleBaseZ + 0.4f);
+        glVertex3f(handleBaseX, handleBaseY + 0.5f, handleBaseZ + 0.4f);
+    }
+
+    glEnd();
+    glEnable(GL_LIGHTING);
 }

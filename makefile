@@ -15,7 +15,7 @@ TARGET = estilingue.exe
 # VERIFIQUE SE OS ARQUIVOS ESTÃO NESSAS PASTAS EXATAS
 # Se 'stb_impl.cpp' estiver na pasta 'stb', mude para 'stb/stb_impl.cpp'
 # Se 'Porco.cpp' não existir mais, apague-o desta lista.
-SOURCES = estilingue.cpp estilingue/SlingshotManager.cpp stb/stb_impl.cpp controle_audio/sdl_audio_manager.cpp menu/gameMenu.cpp porcos/porco.cpp
+SOURCES = estilingue.cpp estilingue/SlingshotManager.cpp stb/stb_impl.cpp controle_audio/sdl_audio_manager.cpp menu/gameMenu.cpp porcos/porco.cpp canhao/canhao.cpp passaros/blue.cpp
 
 OBJECTS = $(SOURCES:.cpp=.o)
 
@@ -52,7 +52,7 @@ $(TARGET): $(OBJECTS)
 clean:
 	@echo "==> Limpando arquivos compilados..."
 	rm -f $(TARGET)
-	rm -f *.o estilingue/*.o stb/*.o controle_audio/*.o Menu/*.o
+	rm -f *.o estilingue/*.o stb/*.o controle_audio/*.o menu/*.o porcos/*.o canhao/*.o
 
 run: all
 	@echo "==> Executando..."
