@@ -1001,8 +1001,9 @@ void timer(int value) {
     }
 
     
-    canhao->atualizar(deltaTime);
-    
+    if (canhao) {
+        canhao->atualizar(deltaTime);
+    }
 
     g_particleManager.update(deltaTime);
 
