@@ -10,6 +10,7 @@ private:
     float shootInterval;
     btVector3 targetPosition;
     std::vector<Porco*> projectiles;
+    Porco* projectile;
     btDiscreteDynamicsWorld* worldRef;
     btVector3 lastVelocity;
 
@@ -21,6 +22,7 @@ public:
     void desenhar() override;
     void shoot();
     void setTarget(btVector3 target);
+    Porco* getProjectile();
     
     // Override to use box shape
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ);

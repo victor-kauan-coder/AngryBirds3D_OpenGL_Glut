@@ -10,12 +10,13 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
       shootInterval(3.0f), // Intervalo reduzido para 3 segundos para teste
       targetPosition(targetPos),
       worldRef(world),
-      lastVelocity(0,0,0)
+      lastVelocity(0,0,0),
+      projectile(nullptr)
 {
     this->vidaMaxima = 50.0f;
     this->vida = 50.0f;
     this->massa = 10.0f; // Heavier than a pig
-    
+    this->escala = 3.0f;
     // Load cannon model
     // Note: The path is relative to the executable or working directory.
     // Assuming "Objetos/" is in the working directory.
@@ -96,6 +97,10 @@ void Cannon::setTarget(btVector3 target) {
     targetPosition = target;
 }
 
+Porco* Cannon::getProjectile() {
+    return projectile;
+}
+
 void Cannon::shoot() {
     if (!ativo || !worldRef) return;
 
@@ -110,7 +115,7 @@ void Cannon::shoot() {
     
     // Create projectile (Porco)
     // Use a smaller scale for the projectile
-    Porco* projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f);    
+    projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f);    
     // Load pig model for the projectile
     
     projectile->inicializarFisica(worldRef, spawnPos.x(), spawnPos.y(), spawnPos.z());

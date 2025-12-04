@@ -140,7 +140,7 @@ bool gameOver = false;
 std::vector<btRigidBody*> targetBodies;
 std::vector<Passaro*>::iterator itPassaroAtual; // Iterador para a fila
 Passaro* passaroAtual = nullptr;
-std::vector<Cannon*> cannons;
+Cannon* canhao = nullptr;
 // Fila de pássaros
 std::vector<Passaro*> filaPassaros;
 std::vector<BlocoDestrutivel*> blocos;
@@ -454,9 +454,8 @@ void initBullet() {
     {
         float yPos = yTeto1 + (tetoH / 2.0f) + 0.5f;
         Cannon* cannon = new Cannon(centro.x() + 1.5f, yPos, centro.z(), dynamicsWorld, btVector3(0.0f, 3.0f, 12.0f));
-        cannons.push_back(cannon);
+        canhao = cannon;
     }
-
     // --- ÁRVORES ---
     trees.clear();
     trees.push_back(Tree(-8.0f, 0.0f, -10.0f, 10.0f));
@@ -717,15 +716,18 @@ void keyboard(unsigned char key, int x, int y) {
                 passaroAtual->resetar(0,0,0);
             }
 
-            // Recria o mundo (cleanupBullet é chamado dentro de initBullet se necessário, 
-            // mas aqui chamamos initBullet que agora gerencia isso)
-            initBullet(); 
-            
-            // Recria o SlingshotManager para usar o NOVO mundo
+            // 1. Deleta o SlingshotManager ANTES de limpar o mundo
+            // Isso permite que o destrutor remova o corpo do mundo e delete a memória corretamente
             if (g_slingshotManager) {
                 delete g_slingshotManager;
-                g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
+                g_slingshotManager = nullptr;
             }
+
+            // 2. Recria o mundo (cleanupBullet é chamado dentro)
+            initBullet(); 
+            
+            // 3. Cria o novo SlingshotManager com o NOVO mundo
+            g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
             
             // Reseta o pássaro atual para garantir que ele crie física no novo mundo se necessário
             // (Na verdade, o SlingshotManager vai cuidar disso quando setProjectile for chamado ou no update)
@@ -864,9 +866,8 @@ glEnable(GL_LIGHTING); //
     }
 
     // Desenha os canhões
-    for (auto& cannon : cannons) {
-        cannon->desenhar();
-    }
+    canhao->desenhar();
+    
 
     // Desenha todos os outros corpos rígidos (as caixas)
     for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
@@ -949,18 +950,22 @@ void timer(int value) {
 
     float deltaTime = 1.0f / 60.0f;
 
-    // DEBUG: Verifica se o estilingue está no mundo físico
-    static bool checkedSling = false;
-    if (!checkedSling && g_slingshotManager && dynamicsWorld) {
-        btRigidBody* sb = g_slingshotManager->getRigidBody();
-        bool found = false;
-        for(int i=0; i<dynamicsWorld->getNumCollisionObjects(); i++) {
-            if(dynamicsWorld->getCollisionObjectArray()[i] == sb) found = true;
-        }
-        if(!found) printf("ALERTA CRITICO: SlingshotBody NAO esta no dynamicsWorld!\n");
-        else printf("INFO: SlingshotBody verificado e presente no dynamicsWorld.\n");
-        checkedSling = true;
-    }
+    // DEBUG: Verifica se o estilingue está no mundo físico (A cada 2 segundos)
+        // static int frameCountDebug = 0;
+        // frameCountDebug++;
+        // if (frameCountDebug % 120 == 0 && g_slingshotManager && dynamicsWorld) {
+        //     btRigidBody* sb = g_slingshotManager->getRigidBody();
+        //     bool found = false;
+        //     for(int i=0; i<dynamicsWorld->getNumCollisionObjects(); i++) {
+        //         if(dynamicsWorld->getCollisionObjectArray()[i] == sb) found = true;
+        //     }
+        //     if(!found) {
+        //         printf("ALERTA CRITICO: SlingshotBody (%p) NAO esta no dynamicsWorld (%p)!\n", sb, dynamicsWorld);
+        //         printf("Total objetos no mundo: %d\n", dynamicsWorld->getNumCollisionObjects());
+        //     } else {
+        //          // printf("INFO: SlingshotBody presente.\n");
+        //     }
+        // }
 
     // Simula a física
     dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
@@ -995,9 +1000,9 @@ void timer(int value) {
         porco->atualizar(deltaTime);
     }
 
-    for (auto& cannon : cannons) {
-        cannon->atualizar(deltaTime);
-    }
+    
+    canhao->atualizar(deltaTime);
+    
 
     g_particleManager.update(deltaTime);
 
@@ -1032,34 +1037,24 @@ void timer(int value) {
             
             // Verifica se o estilingue está envolvido na colisão
             if (slingshotBody && (obA == slingshotBody || obB == slingshotBody)) {
+                printf("DEBUG: COLISAO ENCONTRADA NO LOOP! A=%p B=%p Sling=%p\n", obA, obB, slingshotBody);
                 
                 // Identifica o outro objeto
                 const btCollisionObject* otherOb = (obA == slingshotBody) ? obB : obA;
                 
-                // Verifica se o outro objeto é um porco
-                Porco* porcoColidindo = nullptr;
-                for (auto& p : porcos) {
-                    if (p->getRigidBody() == otherOb) {
-                        porcoColidindo = p;
-                        break;
-                    }
+                Porco* porcoColidindo = canhao->getProjectile();
+                if (otherOb == porcoColidindo->getRigidBody()) {
+                    printf("DEBUG: Porco colidindo com estilingue!\n");
                 }
-
-                if (porcoColidindo) {
-                    // printf("!!! COLISAO CONFIRMADA: Porco x Estilingue !!!\n");
-                    
-                    float impulsoTotal = 0;
-                    for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-                        impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-                    }
-                    
-                    // Se houve impacto real (threshold baixo)
-                    if (impulsoTotal > 0.1f) { 
-                        g_slingshotManager->takeDamage();
-                        porcoColidindo->tomarDano(500.0f); 
-                        contactManifold->clearManifold();
-                    }
+                float velocity = porcoColidindo->getRigidBody()->getLinearVelocity().length();
+                printf("DEBUG: Impulso total na colisao com estilingue: %.2f\n", velocity);
+                // Se houve impacto real (threshold baixo)
+                if (velocity > 0.1f) { 
+                    g_slingshotManager->takeDamage();
+                    porcoColidindo->tomarDano(500.0f); 
+                    contactManifold->clearManifold();
                 }
+                
             }
         }
                     
@@ -1201,6 +1196,7 @@ void init() {
     }
     // 1. Inicializa a física
     initBullet();
+    printf("DEBUG: initBullet concluido. dynamicsWorld = %p\n", dynamicsWorld);
 
     g_menu = new GameMenu(WIDTH, HEIGHT);
     

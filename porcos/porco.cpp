@@ -68,6 +68,10 @@ void Porco::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float 
     // Adiciona um ponteiro para o objeto Porco no corpo rígido para fácil acesso durante colisões
     rigidBody->setUserPointer(this);
 
+    // Habilita CCD (Continuous Collision Detection) para evitar tunneling em alta velocidade
+    rigidBody->setCcdMotionThreshold(raioColisao * escala * 0.5f);
+    rigidBody->setCcdSweptSphereRadius(raioColisao * escala * 0.2f);
+
     mundoFisica->addRigidBody(rigidBody);
     
     // Força a ativação do corpo para que a gravidade seja aplicada imediatamente
@@ -203,4 +207,9 @@ btVector3 Porco::getPosicao() const {
     btTransform transform;
     rigidBody->getMotionState()->getWorldTransform(transform);
     return transform.getOrigin();
+}
+
+btVector3 Porco::getVelocidade() const {
+    if (!rigidBody) return btVector3(0, 0, 0);
+    return rigidBody->getLinearVelocity();
 }

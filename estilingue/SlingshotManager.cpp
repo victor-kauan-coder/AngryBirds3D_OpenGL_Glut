@@ -46,6 +46,20 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
     initGeometry();
 }
 
+SlingshotManager::~SlingshotManager() {
+    if (slingshotBody) {
+        // Nota: Se o worldRef já foi deletado (cleanupBullet), isso pode causar crash.
+        // Mas como cleanupBullet limpa os objetos antes de deletar o mundo, 
+        // o slingshotBody já deve ter sido removido do mundo.
+        // Aqui apenas garantimos a limpeza da memória do corpo e shape.
+        
+        if (slingshotBody->getMotionState()) delete slingshotBody->getMotionState();
+        if (slingshotBody->getCollisionShape()) delete slingshotBody->getCollisionShape();
+        delete slingshotBody;
+        slingshotBody = nullptr;
+    }
+}
+
 // 4. Implementação das Funções Públicas
 
 /**
@@ -105,14 +119,14 @@ void SlingshotManager::initGeometry() {
     slingshotBody->setRestitution(0.5f);
     slingshotBody->setFriction(0.8f);
     
-    // Força o objeto a ser Kinematic (Animado/Estático mas sempre ativo) para garantir detecção
-    slingshotBody->setCollisionFlags(slingshotBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-    slingshotBody->setActivationState(DISABLE_DEACTIVATION);
+    // REMOVIDO: CF_KINEMATIC_OBJECT. O estilingue é estático.
+    // slingshotBody->setCollisionFlags(slingshotBody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+    // slingshotBody->setActivationState(DISABLE_DEACTIVATION);
 
     // Adiciona ao mundo
     if (worldRef) {
         worldRef->addRigidBody(slingshotBody);
-        printf("DEBUG: SlingshotBody CRIADO e ADICIONADO ao mundo %p. Body: %p\n", worldRef, slingshotBody);
+        printf("DEBUG: SlingshotBody (%p) ADICIONADO ao mundo %p.\n", slingshotBody, worldRef);
     } else {
         printf("ERRO CRITICO: SlingshotManager criado sem worldRef!\n");
     }

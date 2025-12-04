@@ -66,6 +66,7 @@ public:
     // 4. MODIFICADO: Construtor
     // SlingshotManager(btDiscreteDynamicsWorld* world, btCollisionShape* shape, int* shots, bool* game_over); // <-- Antigo
     SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* projectile, int* shots, bool* game_over);       // <-- Novo
+    ~SlingshotManager(); // Destrutor
     
     // --- Funções Públicas de Interface ---
 
