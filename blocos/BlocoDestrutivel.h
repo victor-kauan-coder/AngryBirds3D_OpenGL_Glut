@@ -136,8 +136,8 @@ public:
             case MaterialTipo::PEDRA:
                 prefixoTextura = "pedra";
                 massa = 12.0f;
-                saudeTotal = 24.0f;
-                atrito = 0.8f;
+                saudeTotal = 30.0f;
+                atrito = 10.0f;
                 restituicao = 0.05f;
                 pontuacaoValor = 300;
                 corR = 0.4f; corG = 0.4f; corB = 0.4f;
@@ -243,7 +243,7 @@ public:
         startTransform.setOrigin(position);
         startTransform.setRotation(rotation);
         
-        btVector3 localInertia(0, 0, 0);
+        btVector3 localInertia(100, 100, 100);
         if (massa != 0.f)
             blockShape->calculateLocalInertia(massa, localInertia);
 
