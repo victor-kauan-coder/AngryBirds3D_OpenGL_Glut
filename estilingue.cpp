@@ -26,7 +26,8 @@
 #include "controle_audio/audio_manager.h"
 //menu inicial 
 #include "menu/gameMenu.h"
-
+//tela de carregamento 
+#include "menu/LoadingScreen.h" // <--- Adicione isto
 //elementos do cenario
 #include "cenario/Tree.h"
 //manager da iluminação 
@@ -46,6 +47,12 @@ std::vector<Passaro*> extraBirds;
 const int WIDTH = 1280;
 const int HEIGHT = 720;
 
+
+// --- VARIÁVEIS GLOBAIS NOVAS ---
+//variaveis para o frame do jogo 
+int frameCount = 0;
+int previousTime = 0;
+float fps = 0.0f;
 // Mundo de física Bullet
 btDiscreteDynamicsWorld* dynamicsWorld;
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
@@ -573,6 +580,18 @@ void drawHUD() {
     
     glColor3f(1.0f, 1.0f, 1.0f);
     glRasterPos2f(20, HEIGHT - 30);
+
+    if (fps >= 55.0f) glColor3f(0.0f, 1.0f, 0.0f); // Verde
+    else if (fps >= 30.0f) glColor3f(1.0f, 1.0f, 0.0f); // Amarelo
+    else glColor3f(1.0f, 0.0f, 0.0f); // Vermelho
+
+    glRasterPos2f(WIDTH - 120, HEIGHT - 30); // Canto superior direito
+    char fpsText[30];
+    sprintf(fpsText, "FPS: %.1f", fps);
+    for (char* c = fpsText; *c != '\0'; c++) {
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c); // Fonte negrito
+    }
+
     char scoreText[50];
     sprintf(scoreText, "Pontos: %d", score);
     for (char* c = scoreText; *c != '\0'; c++) {
@@ -788,6 +807,19 @@ void specialKeys(int key, int x, int y) {
 // --- Funções Principais (Display, Timer, Init) ---
 
 void display() {
+    if (!jogoCarregado) {
+        DrawLoadingScreen(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
+        return; // <--- IMPEDE A EXECUÇÃO DO RESTO DA FUNÇÃO
+    }
+    frameCount++;
+    int currentTime = glutGet(GLUT_ELAPSED_TIME);
+    int timeInterval = currentTime - previousTime;
+
+    if (timeInterval > 1000) { // Atualiza a cada 1 segundo (1000ms)
+        fps = frameCount / (timeInterval / 1000.0f);
+        previousTime = currentTime;
+        frameCount = 0;
+    }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     drawSky();
@@ -866,64 +898,64 @@ void display() {
     
 
     // Desenha todos os outros corpos rígidos (as caixas)
-    for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-        btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-        btRigidBody* body = btRigidBody::upcast(obj);
+    // for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+    //     btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+    //     btRigidBody* body = btRigidBody::upcast(obj);
         
-        if (body && body->getMotionState() && body->getInvMass() != 0) {
+    //     if (body && body->getMotionState() && body->getInvMass() != 0) {
             
-            // Pula o 'passaroAtual', pois ele já foi desenhado acima
-            if (passaroAtual && body == passaroAtual->getRigidBody()) {
-                continue;
-            }
+    //         // Pula o 'passaroAtual', pois ele já foi desenhado acima
+    //         if (passaroAtual && body == passaroAtual->getRigidBody()) {
+    //             continue;
+    //         }
             
-            btTransform trans;
-            body->getMotionState()->getWorldTransform(trans);
-            btScalar m[16];
-            trans.getOpenGLMatrix(m);
+    //         btTransform trans;
+    //         body->getMotionState()->getWorldTransform(trans);
+    //         btScalar m[16];
+    //         trans.getOpenGLMatrix(m);
             
-            glPushMatrix();
-            glMultMatrixf(m);
+    //         glPushMatrix();
+    //         glMultMatrixf(m);
             
-            btCollisionShape* shape = body->getCollisionShape();
+    //         btCollisionShape* shape = body->getCollisionShape();
             
-            // CORREÇÃO: Mudado de 'else if' para 'if'
-            // Desenha apenas as caixas-alvo
-            if (shape == boxShape) {
-                glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
+    //         // CORREÇÃO: Mudado de 'else if' para 'if'
+    //         // Desenha apenas as caixas-alvo
+    //         if (shape == boxShape) {
+    //             glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
                 
-                // Verifica se o alvo está na mira
-                if (g_slingshotManager && g_slingshotManager->isTargetInAimLine(body)) {
-                    glColor3f(0.2f, 1.0f, 0.2f); // Verde
-                } else {
-                    glColor3f(0.6f, 0.4f, 0.2f); // Madeira
-                }
+    //             // Verifica se o alvo está na mira
+    //             if (g_slingshotManager && g_slingshotManager->isTargetInAimLine(body)) {
+    //                 glColor3f(0.2f, 1.0f, 0.2f); // Verde
+    //             } else {
+    //                 glColor3f(0.6f, 0.4f, 0.2f); // Madeira
+    //             }
                 
-                if (blockModelLoaded) {
-                    // Se o modelo carregou, desenha o .obj
-                    glScalef(5.0, 5.0, 5.0);
-                    blockModel.draw();
-                } else {
-                    // Senão, desenha o cubo antigo como fallback
-                    glutSolidCube(1.0);
-                }
+    //             if (blockModelLoaded) {
+    //                 // Se o modelo carregou, desenha o .obj
+    //                 glScalef(5.0, 5.0, 5.0);
+    //                 blockModel.draw();
+    //             } else {
+    //                 // Senão, desenha o cubo antigo como fallback
+    //                 glutSolidCube(1.0);
+    //             }
                 
-                // (Contorno da caixa)
-                // glDisable(GL_LIGHTING);
-                // glColor3f(0.3f, 0.2f, 0.1f);
-                // glLineWidth(2.0f);
-                // glBegin(GL_LINES);
-                // glVertex3f(-0.5f, 0.0f, -0.5f);
-                // glVertex3f(0.5f, 0.0f, -0.5f);
-                // glVertex3f(-0.5f, 0.0f, 0.5f);
-                // glVertex3f(0.5f, 0.0f, 0.5f);
-                // glEnd();
-                // glEnable(GL_LIGHTING);
-            }
+    //             // (Contorno da caixa)
+    //             // glDisable(GL_LIGHTING);
+    //             // glColor3f(0.3f, 0.2f, 0.1f);
+    //             // glLineWidth(2.0f);
+    //             // glBegin(GL_LINES);
+    //             // glVertex3f(-0.5f, 0.0f, -0.5f);
+    //             // glVertex3f(0.5f, 0.0f, -0.5f);
+    //             // glVertex3f(-0.5f, 0.0f, 0.5f);
+    //             // glVertex3f(0.5f, 0.0f, 0.5f);
+    //             // glEnd();
+    //             // glEnable(GL_LIGHTING);
+    //         }
             
-            glPopMatrix();
-        }
-    }
+    //         glPopMatrix();
+    //     }
+    // }
     
     glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
 
@@ -1206,6 +1238,11 @@ void reshape(int w, int h) {
 
 void init() {
     glEnable(GL_DEPTH_TEST);
+
+    glEnable(GL_CULL_FACE);  // Não desenha a parte de trás dos objetos
+    glCullFace(GL_BACK);     // Define que é a parte de trás a ser ignorada
+
+
     glShadeModel(GL_FLAT);
     glEnable(GL_LINE_SMOOTH);
     glDisable(GL_CULL_FACE);
@@ -1300,90 +1337,104 @@ void init() {
     printf("===================================\n\n");
 }
 
+void carregarJogo(int value) {
+    if (!jogoCarregado) {
+        printf("=== INICIANDO CARREGAMENTO DOS RECURSOS ===\n");
+
+        // -------------------------------------------------------
+        // AQUI ESTAVA O PESO (Criação dos Pássaros = Carregar OBJ/MTL)
+        // -------------------------------------------------------
+        for (int i = 0; i < 8; i+=3) {
+            filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
+            filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
+            filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
+            filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
+        }
+
+        // Inicializa o iterador e o primeiro pássaro
+        itPassaroAtual = filaPassaros.begin();
+        if (itPassaroAtual != filaPassaros.end()) {
+            passaroAtual = *itPassaroAtual;
+        }
+        
+        // Inicializa Física, Texturas do jogo, etc.
+        init();
+
+        // Inicializa Áudio
+        if (!g_audioManager.initAudio()) {
+            printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
+        }
+        g_audioManager.setVolume(10.0f);
+
+        // Configura os callbacks de INTERAÇÃO (Mouse/Teclado)
+        // Só ativamos isso agora, para o jogador não clicar durante o loading
+        glutMouseFunc(mouse);
+        glutMotionFunc(mouseMotion);
+        glutPassiveMotionFunc(passiveMouseMotion);
+        glutKeyboardFunc(keyboard);
+        glutSpecialFunc(specialKeys);
+        
+        // Inicia o loop de física
+        glutTimerFunc(0, timer, 0);
+
+        // --- FINALIZAÇÃO ---
+        jogoCarregado = true; // Libera o display para desenhar o jogo 3D
+        glutPostRedisplay();  // Força atualização da tela
+        printf("=== CARREGAMENTO CONCLUIDO ===\n");
+    }
+}
+
+
 int main(int argc, char** argv) {
+    // 1. Inicialização Básica do GLUT (Janela)
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(WIDTH, HEIGHT);
-    glutCreateWindow("Estilingue 3D - Refatorado com Classe");
+    glutCreateWindow("Estilingue 3D - Angry C++ Birds"); // Mudei o título :)
     
-    // (init_audio)
-    
-    // CRÍTICO: Criar o objeto 'red' ANTES de chamar init()
-        // red = new PassaroRed(0.0f, 0.0f, 0.0f);
-        // chuck = new PassaroChuck(0.0f, 0.0f, 0.0f);
-    // cria a fila de passaros
-    for (int i = 0; i < 8; i+=3) {
-        filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
-    }
+    // 2. Inicializa APENAS a Tela de Carregamento (Leve)
+    InitLoadingScreen(); 
 
-    // Inicializa o iterador e o primeiro pássaro
-    itPassaroAtual = filaPassaros.begin();
-    if (itPassaroAtual != filaPassaros.end()) {
-        passaroAtual = *itPassaroAtual;
-    }
-    
-    
-    // Agora 'init()' pode usar o ponteiro 'red'
-    init();
-
-    if (!g_audioManager.initAudio()) {
-        printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
-    }
-    g_audioManager.setVolume(10.0f);
-    // Configura os callbacks do GLUT
+    // 3. Define callbacks visuais básicos
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    glutMouseFunc(mouse);
-    glutMotionFunc(mouseMotion);
-    glutPassiveMotionFunc(passiveMouseMotion);
-    glutKeyboardFunc(keyboard);
-    glutSpecialFunc(specialKeys);
-    glutTimerFunc(0, timer, 0);
     
+    // 4. O TRUQUE: Chama o carregamento pesado daqui a 100ms
+    // Isso dá tempo da janela abrir e desenhar a imagem de fundo antes de travar.
+    glutTimerFunc(100, carregarJogo, 0);
+    
+    // 5. Entra no loop
     glutMainLoop();
     
-    // --- Limpeza ---
+    // --- LIMPEZA DE MEMÓRIA (Executado ao fechar) ---
+    // (Este código permanece igual ao seu original, para limpar ao sair)
     if (passaroAtual) {
-        delete passaroAtual;  // O destrutor de Passaro deve limpar a física
+        delete passaroAtual;
         passaroAtual = nullptr;
     }
-    // Limpa todos os pássaros restantes na fila
-    for (auto* passaro : filaPassaros) {
-        delete passaro;
-    }
+    for (auto* passaro : filaPassaros) delete passaro;
     filaPassaros.clear();
     
-    // Limpa os corpos e shapes do Bullet
-    for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-        btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-        btRigidBody* body = btRigidBody::upcast(obj);
-        
-        if (body && body->getMotionState()) {
-            delete body->getMotionState();
+    // Limpeza Bullet Physics
+    if (dynamicsWorld) {
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
+            if (body && body->getMotionState()) delete body->getMotionState();
+            dynamicsWorld->removeCollisionObject(obj);
+            delete obj;
         }
-        dynamicsWorld->removeCollisionObject(obj);
-        delete obj;
     }
-    
-    for (int i = 0; i < collisionShapes.size(); i++) {
-        delete collisionShapes[i];
-    }
+    for (int i = 0; i < collisionShapes.size(); i++) delete collisionShapes[i];
     
     g_audioManager.cleanup();
-    // Limpa o gerenciador
-    delete g_slingshotManager;
+    if(g_slingshotManager) delete g_slingshotManager;
     
-    // Limpa o mundo Bullet
     delete dynamicsWorld;
     delete solver;
     delete dispatcher;
     delete collisionConfiguration;
     delete broadphase;
 
-    // (close_audio)
-    
     return 0;
 }

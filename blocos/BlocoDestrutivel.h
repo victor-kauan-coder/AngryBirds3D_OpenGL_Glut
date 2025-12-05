@@ -44,6 +44,7 @@ extern AudioManager g_audioManager;
  */
 class BlocoDestrutivel : public OBJModel {
 private:
+    float escalaVisual;
     // --- ADICIONE ESTAS VARIÁVEIS PRIVADAS ---
     // Timers para as animações
     bool estaAnimandoDano;
@@ -112,7 +113,8 @@ public:
      * @param d Profundidade total (comprimento) do bloco.
      */
     BlocoDestrutivel(MaterialTipo tipo, const char* modeloPath, float w, float h, float d)
-        : corpoRigido(nullptr), estado(EstadoDano::INTEIRO), isContactActive(false),
+        : OBJModel(),
+        corpoRigido(nullptr), estado(EstadoDano::INTEIRO), isContactActive(false),
         estaAnimandoDano(false), animDanoTimer(0.0f), animDanoDuracao(0.3f), // 0.3 segundos de tremor
         estaAnimandoDestruicao(false), animDestruicaoTimer(0.0f), animDestruicaoDuracao(0.5f) // 0.5 segundos encolhendo
     {
@@ -168,6 +170,9 @@ public:
         if (!loadFromFile(modeloPath)) {
             printf("ERRO: Falha ao carregar modelo de bloco: %s\n", modeloPath);
         }
+        float maxDimOriginal = std::max({dimensoes.x()*2, dimensoes.y()*2, dimensoes.z()*2});
+        // Armazena para usar no draw()
+        escalaVisual = maxDimOriginal / 0.6f;
     }
 
     ~BlocoDestrutivel() {
@@ -293,10 +298,11 @@ void aplicarDano(float dano) {
         if(dano >= 0.5f) g_audioManager.playColisao(tipoMaterial, 70);
         // --- Lógica de Troca de Textura (Dano) ---
         if (saudeAtual <= saudeTotal * 0.5f && estado == EstadoDano::INTEIRO) {
-            printf("Bloco danificado!\n");
+            // printf("Bloco danificado!\n");
             estado = EstadoDano::DANIFICADO;
             if (!meshes.empty() && texturaIDDanificado != 0) {
                 meshes[0].material.textureID = texturaIDDanificado;
+                invalidateDisplayList();
             }
             
         }
@@ -326,41 +332,32 @@ void aplicarDano(float dano) {
     // Em BlocoDestrutivel.h
 
     void desenhar() {
-        // Agora, 'DESTRUIDO' significa "limpeza", então não desenhe
         if (estado == EstadoDano::DESTRUIDO) return; 
         if (!corpoRigido) return;
 
         btTransform trans;
         corpoRigido->getMotionState()->getWorldTransform(trans);
-        
         btScalar m[16];
         trans.getOpenGLMatrix(m);
         
         glPushMatrix();
         glMultMatrixf(m);
 
-        // --- ADICIONADO: Lógica da Animação de Tremor (Dano) ---
         if (estaAnimandoDano) {
-            // Calcula um tremor rápido (seno) no eixo X
-            float shakeOffset = sin(animDanoTimer * 100.0f) * 0.05f; // (Frequência * Amplitude)
+            float shakeOffset = sin(animDanoTimer * 100.0f) * 0.05f; 
             glTranslatef(shakeOffset, 0, 0);
         }
 
-        // --- ADICIONADO: Lógica da Animação de Encolhimento (Destruição) ---
         if (estaAnimandoDestruicao) {
-            // Calcula a escala de 1.0 (início) para 0.0 (fim)
-            float t = (animDestruicaoTimer / animDestruicaoDuracao); // 0.0 -> 1.0
-            float escala = 1.0f - t; // 1.0 -> 0.0
-            
-            // Aplica a escala de encolhimento
+            float t = (animDestruicaoTimer / animDestruicaoDuracao);
+            float escala = 1.0f - t; 
             glScalef(escala, escala, escala);
         }
-        // --- Correção da Escala da Normalização (código original) ---
-        float maxDimOriginal = std::max({dimensoes.x()*2, dimensoes.y()*2, dimensoes.z()*2});
-        float escalaNecessaria = maxDimOriginal / 0.6f;
-        glScalef(escalaNecessaria, escalaNecessaria, escalaNecessaria);
 
-        OBJModel::draw(); 
+        // Usa a escala pré-calculada (muito mais rápido)
+        glScalef(escalaVisual, escalaVisual, escalaVisual);
+
+        OBJModel::draw(); // Agora chama a versão SUPER RÁPIDA com Display Lists
         glPopMatrix();
     }
 

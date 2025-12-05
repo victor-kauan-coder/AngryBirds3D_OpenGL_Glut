@@ -20,46 +20,49 @@ PassaroBlue::PassaroBlue(float posX, float posY, float posZ)
 void PassaroBlue::usarHabilidade() {
     if (habilidadeUsada || !isEmVoo() || !mundoFisica) return;
     
-    printf("Habilidade Blue ativada: Multiplicar!\n");
+    // printf("Habilidade Blue ativada: Multiplicar!\n");
     habilidadeUsada = true;
     
     btVector3 pos = getPosicao();
     btVector3 vel = getVelocidade();
     
-    // Vetor "Right" (perpendicular à velocidade e ao UP)
+    // Cálculo vetorial para espalhar os clones
     btVector3 up(0, 1, 0);
     btVector3 forward = vel.normalized();
     btVector3 right = forward.cross(up).normalized();
     
-    // Se a velocidade for muito vertical, o cross product falha.
     if (right.length2() < 0.01f) {
         right = btVector3(1, 0, 0);
     }
     
-    float offset = 1.5f; // Distância lateral
-    float spreadImpulse = 3.0f; // Força lateral
+    float offset = 1.5f; 
     
     // Cria 2 clones
-    for (int i = -1; i <= 1; i += 2) { // -1 e 1
-        PassaroBlue* clone = new PassaroBlue(pos.x(), pos.y(), pos.z());
+    for (int i = -1; i <= 1; i += 2) { // Loop para -1 e 1
         
-        // Inicializa física deslocada
+        // --- CORREÇÃO DE PERFORMANCE AQUI ---
+        // Em vez de: new PassaroBlue(...) que carrega o modelo do HD.
+        // Usamos: new PassaroBlue(*this) que copia o modelo da RAM.
+        PassaroBlue* clone = new PassaroBlue(*this);
+        
+        // O clone já nasce com a habilidade "gasta" para não se multiplicar infinitamente
+        clone->habilidadeUsada = true; 
+        
+        // Calcula posição deslocada
         btVector3 clonePos = pos + right * (offset * i);
+        
+        // --- IMPORTANTE: Reinicializar a Física ---
+        // O clone copiou o ponteiro do corpo rígido do pai. 
+        // Precisamos criar um NOVO corpo físico exclusivo para o clone.
+        // O método inicializarFisica vai sobrescrever o ponteiro antigo, o que é o desejado.
         clone->inicializarFisica(mundoFisica, clonePos.x(), clonePos.y(), clonePos.z());
         
-        // CRÍTICO: Força o corpo a acordar, pois inicializarFisica coloca em SLEEPING
-        clone->getRigidBody()->setActivationState(ACTIVE_TAG);
-        clone->getRigidBody()->activate(true);
+        // Garante que o clone acorde na simulação
+        if(clone->getRigidBody()){
+             clone->getRigidBody()->setActivationState(ACTIVE_TAG);
+             clone->getRigidBody()->setLinearVelocity(vel); // Mantém a velocidade do pai
+        }
 
-        // Define mesma velocidade
-        clone->setVelocidade(vel.x(), vel.y(), vel.z());
-        
-        // Aplica impulso lateral
-        clone->getRigidBody()->applyCentralImpulse(right * (spreadImpulse * i));
-        
-        clone->setEmVoo(true);
-        clone->habilidadeUsada = true; // Clones não podem multiplicar de novo
-        
         // Adiciona à lista global
         extraBirds.push_back(clone);
     }

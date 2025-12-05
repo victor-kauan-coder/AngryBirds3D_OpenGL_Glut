@@ -246,7 +246,7 @@ public:
             float velocidadeTotal = vel.length();
             if (emVoo) {
                 tempoVoo += deltaTime;
-                printf("Tempo de voo do pássaro: %f\n", tempoVoo);
+                // printf("Tempo de voo do pássaro: %f\n", tempoVoo);
                 if (tempoVoo >= tempoVooMaximo) {
                     ativo = false;
                     emVoo = false;
@@ -258,7 +258,7 @@ public:
             if (emVoo && velocidadeTotal < 0.1f) {
                 tempoVida += deltaTime;
                 
-                printf("Tempo de vida do pássaro: %f\n", tempoVida);
+                // printf("Tempo de vida do pássaro: %f\n", tempoVida);
                 if (tempoVida >= tempoVidaMaximo) {
                     ativo = false;
                     emVoo = false;
