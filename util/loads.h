@@ -12,6 +12,10 @@
 
 #include "../stb/stb_image.h"
 
+
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
 struct Material {
     std::string name; 
     float ambient[3] = { 0.2f, 0.2f, 0.2f };
@@ -75,23 +79,33 @@ struct OBJModel {
 
     GLuint loadTexture(const char* filename) {
         int width, height, nrChannels;
+        
+        // 1. Tenta carregar normal
         stbi_set_flip_vertically_on_load(true); 
         unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
+        
         if (!data) {
-            // printf("Aviso: Nao foi possivel carregar a textura %s\n", filename);
+            // Se falhar, avisa (opcional) e retorna 0
             return 0; 
         }
+
         GLenum format = GL_RGB;
         if (nrChannels == 4) format = GL_RGBA;
 
         GLuint textureID;
         glGenTextures(1, &textureID); 
         glBindTexture(GL_TEXTURE_2D, textureID); 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        // 2. CONFIGURAÇÃO PIXEL-PERFECT (Para Canhão e Blocos ficarem nítidos)
+        // GL_NEAREST = Mantém os pixels quadrados (estilo Minecraft/Retro)
+        // GL_CLAMP_TO_EDGE = Impede bordas misturadas
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        
         stbi_image_free(data);
         return textureID; 
     }

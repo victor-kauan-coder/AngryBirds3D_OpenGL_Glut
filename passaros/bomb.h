@@ -3,9 +3,12 @@
 
 #include "passaro.h"
 #include "../blocos/ParticleManager.h"
+#include "../controle_audio/audio_manager.h"
 #include <vector>
 
 extern ParticleManager g_particleManager;
+
+extern AudioManager g_audioManager;
 
 /**
  * Classe derivada: Bomb (Bomba)
@@ -20,7 +23,7 @@ public:
     PassaroBomb(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f)
         : Passaro(posX, posY, posZ, 1.2f, 1.2f) {
         setCor(0.1f, 0.1f, 0.1f); // Preto
-        setMassa(5.0f); // Mais pesado
+        setMassa(3.5f); // Mais pesado
         setTipo("Bomb");
         carregarModelo("Objetos/Bomb.obj");
         carregarMTL("Objetos/Bomb.mtl");
@@ -121,7 +124,7 @@ public:
         }
         
         // Opcional: Efeito visual ou sonoro aqui
-        // g_audioManager.playExplosao();
+        g_audioManager.playPassaro(SomTipo::EXPLOSAO, 100);
     }
 };
 #endif // BOMB_H

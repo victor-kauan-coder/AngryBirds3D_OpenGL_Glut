@@ -34,13 +34,20 @@ bool AudioManager::initAudio() {
     if (loadSound(SomTipo::BLOCO_MADEIRA_DESTRUIDO, "song/madeira_quebrando" AUDIO_EXTENSION) &&
         loadSound(SomTipo::BLOCO_PEDRA_DESTRUIDO, "song/pedra_quebrando" AUDIO_EXTENSION) &&
         loadSound(SomTipo::BLOCO_GELO_DESTRUIDO, "song/gelo_quebrando" AUDIO_EXTENSION) &&
+        loadSound(SomTipo::LANCAMENTO_PASSARO_BOMB, "song/lancamento_passaro_bomb" AUDIO_EXTENSION) &&
+        loadSound(SomTipo::LANCAMENTO_PASSARO_CHUCK, "song/lancamento_passaro_chuck" AUDIO_EXTENSION) &&
+        loadSound(SomTipo::LANCAMENTO_PASSARO_BLUE, "song/lancamento_passaro_blue" AUDIO_EXTENSION) &&
         loadSound(SomTipo::LANCAMENTO_PASSARO, "song/lancamento_passaro" AUDIO_EXTENSION) &&
         loadSound(SomTipo::ESTILINGUE_PUXANDO, "song/estilingue_puxando" AUDIO_EXTENSION)&&
         loadSound(SomTipo::ESTILINGUE_SOLTANDO, "song/estilingue_soltando" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_GELO, "song/colisao_gelo" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_MADEIRA, "song/colisao_madeira" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_PEDRA, "song/colisao_pedra" AUDIO_EXTENSION)&&
-        loadSound(SomTipo::COLISAO_PASSARO, "song/colisao_passaro" AUDIO_EXTENSION)) 
+        loadSound(SomTipo::COLISAO_PASSARO, "song/colisao_passaro" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::MORTE_PASSARO, "song/passaro_morrendo" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::MORTE_PASSARO, "song/porco_morrendo" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::SOM_CANHAO, "song/som_canhao" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::EXPLOSAO, "song/explosao" AUDIO_EXTENSION)) 
     {
         printf("Audio carregado com sucesso.\n");
         return true;

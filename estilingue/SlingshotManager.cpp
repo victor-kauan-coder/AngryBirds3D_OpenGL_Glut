@@ -8,6 +8,7 @@
 #include <GL/glu.h>  // Necessário para funções GLU (gluProject, gluCylinder, etc.)
 #include <cmath>     // Necessário para funções matemáticas (sin, cos, sqrt, fabs)
 #include <cstdio>  // Necessário para a função de console 'printf'
+#include <string>
 //objeto a ser lançado pelo esitlingue
 #include "../passaros/passaro.h"
 #include "../controle_audio/audio_manager.h"
@@ -199,6 +200,7 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
 
     if (state == GLUT_UP && (button == 3 || button == 4)) { 
         handleMouseScroll(button);
+        
         return; // Termina a função após tratar o scroll
     }
     // Só nos importamos com o botão esquerdo do mouse
@@ -272,7 +274,25 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
             if (isPouchGrabbed && isBeingPulled && projectileInPouch) {
                 // ...LANCE!
                 launchProjectile();
-                g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
+
+                g_audioManager.playSlingshot(false,75);
+                std::string tipo_passaro = projectileRef->getTipo();
+
+                if (tipo_passaro == "Bomb") {
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BOMB);
+                } 
+                else if (tipo_passaro == "Blue") {
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BLUE);
+                } 
+                else if (tipo_passaro == "Chuck") {
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_CHUCK);
+                } 
+                else {
+                    // Default: Som do Red ou genérico
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
+                }
+                
+
             }
             
             // Reseta todos os estados de interação
@@ -431,6 +451,8 @@ void SlingshotManager::setProjectile(Passaro* novoPassaro) {
     
     // Atualiza a referência
     projectileRef = novoPassaro;
+
+    
     
     // Reseta estados de interação
     isBeingPulled = false;
@@ -561,9 +583,21 @@ void SlingshotManager::launchProjectile() {
 
     // 5. Avisa a classe Passaro que ela está em voo (baseado no README)
     projectileRef->setEmVoo(true);
-    
+    std::string tipo_passaro = projectileRef->getTipo();
     // Toca som de lançamento
-    g_audioManager.play(SomTipo::LANCAMENTO_PASSARO);
+    if (tipo_passaro == "Bomb") {
+        g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BOMB);
+    } 
+    else if (tipo_passaro == "Blue") {
+        g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BLUE);
+    } 
+    else if (tipo_passaro == "Chuck") {
+        g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_CHUCK);
+    } 
+    else {
+        // Default: Som do Red ou genérico
+        g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
+    }
 
     // O projétil foi lançado. Ele não está mais "na nossa malha".
     projectileInPouch = nullptr; 

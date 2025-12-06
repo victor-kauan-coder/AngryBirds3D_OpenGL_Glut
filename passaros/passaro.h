@@ -263,6 +263,7 @@ public:
                     ativo = false;
                     emVoo = false;
                     limparFisica();
+                    g_audioManager.playPassaro(SomTipo::MORTE_PASSARO, 65);
                 }
             }
         }

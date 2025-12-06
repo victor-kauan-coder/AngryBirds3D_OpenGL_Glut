@@ -85,8 +85,8 @@ SlingshotManager* g_slingshotManager = nullptr; // ponteiro para o gerenciador d
 LightingManager g_lightingManager; //manager da iluuminação
 // Variáveis globais de câmera e jogo
 float cameraAngleH = 0.0f;
-float cameraAngleV = 14.0f;
-float cameraDistance = 34.0f;
+float cameraAngleV = 5.0f;
+float cameraDistance = 33.5f;
 float cameraTargetY = 3.0f;
 
 int score = 0;
@@ -285,8 +285,8 @@ void initBullet() {
     const char* pathPlaca = "Objetos/bloco_placa.obj"; 
     
     // Escala e Unidade
-    float escala = 1.5f; 
-    float unit = 0.5f * escala; 
+    float escala = 0.5f; 
+    float unit = escala; 
 
     // Dimensões dos Blocos
     float pilarW = 1.0f * unit; 
@@ -312,9 +312,17 @@ void initBullet() {
 
     auto estabilizarRigidBody = [&](btRigidBody* rb) {
         if(rb) {
-            rb->setActivationState(ISLAND_SLEEPING);
-            rb->setDamping(0.5f, 0.5f);
-            rb->setFriction(2.5f);
+            // 1. ACORDA O BLOCO: A gravidade vai puxá-lo para baixo imediatamente
+            rb->activate(true); 
+            
+            // 2. FREIO DE MÃO (Damping Alto):
+            // Isso impede que a torre desmorone violentamente ao nascer.
+            // Eles vão cair devagar até se acomodarem.
+            rb->setDamping(0.9f, 0.9f); 
+
+            // 3. ATRITO E PESO
+            rb->setFriction(2.0f);
+            // rb->setMassProps(rb->getInvMass() == 0 ? 0 : 1.0f/rb->getInvMass(), btVector3(0,0,0)); // Opcional
         }
     };
 
@@ -378,15 +386,15 @@ void initBullet() {
 
                         // PORCOS
                         if (idTorre != 2 && (andar == 1 || andar == 3)) {
-                            Porco* p = new Porco(xPos + -2.2f, yFinal, zPos); 
-                            p->inicializarFisica(dynamicsWorld, xPos + 5.0f, yFinal, zPos); 
+                            Porco* p = new Porco(xPos + -1.1f, yFinal, zPos); 
+                            p->inicializarFisica(dynamicsWorld, xPos - 1.1f, yFinal, zPos); 
                             estabilizarRigidBody(p->getRigidBody());
                             porcos.push_back(p);
                         }
                         
                         // CANHÕES (Torre central)
                         if (idTorre == 2 && andar == 2) {
-                            Cannon* c = new Cannon(xPos + 2.2f, yFinal, zPos, dynamicsWorld, alvoCanhao);
+                            Cannon* c = new Cannon(xPos + 1.0f, yFinal, zPos, dynamicsWorld, alvoCanhao);
                             estabilizarRigidBody(c->getRigidBody());
                             canhoes.push_back(c); 
                         }
@@ -421,26 +429,6 @@ void initBullet() {
     }
     // --- ÁRVORES ---
     trees.clear();
-    // trees.push_back(Tree(-7.0f, 0.0f, -50.0f, 16.0f));
-    // trees.push_back(Tree(-16.0f, 0.0f, -50.0f, 15.3f));
-    // trees.push_back(Tree(-25.0f, 0.0f, -50.0f, 16.1f));
-    // trees.push_back(Tree(-34.0f, 0.0f, -50.0f, 15.0f));
-    // trees.push_back(Tree(-43.0f, 0.0f, -50.0f, 15.2f));
-    // trees.push_back(Tree(-52.0f, 0.0f, -50.0f, 16.0f));
-    // trees.push_back(Tree(-16.5f, 0.0f, -40.0f, 14.0f));
-    // trees.push_back(Tree(-20.5f, 0.0f, -35.0f, 14.0f));
-    // trees.push_back(Tree(-33.5f, 0.0f, -35.0f, 14.0f));
-    // trees.push_back(Tree(-20.5f, 0.0f, -20.0f, 12.0f));
-    // trees.push_back(Tree(7.0f, 0.0f, -50.0f, 16.0f));
-    // trees.push_back(Tree(16.0f, 0.0f, -50.0f, 15.3f));
-    // trees.push_back(Tree(25.0f, 0.0f, -50.0f, 16.1f));
-    // trees.push_back(Tree(34.0f, 0.0f, -50.0f, 15.0f));
-    // trees.push_back(Tree(43.0f, 0.0f, -50.0f, 15.2f));
-    // trees.push_back(Tree(52.0f, 0.0f, -50.0f, 16.0f));
-    // trees.push_back(Tree(16.5f, 0.0f, -40.0f, 14.0f));
-    // trees.push_back(Tree(20.5f, 0.0f, -35.0f, 14.0f));
-    // trees.push_back(Tree(33.5f, 0.0f, -35.0f, 14.0f));
-    // trees.push_back(Tree(20.5f, 0.0f, -20.0f, 12.0f));
     // Par 1: Extremos distantes
     trees.push_back(Tree( 55.0f, 0.0f, -55.0f, 19.0f));
     trees.push_back(Tree(-55.0f, 0.0f, -55.0f, 19.0f));
@@ -1007,6 +995,23 @@ void timer(int value) {
     for (auto& bloco : blocos) {
         bloco->update(deltaTime);
         bloco->clearContactFlag();
+
+        // --- CORREÇÃO: LIBERAR FÍSICA APÓS ESTABILIZAR ---
+        // Se já passaram 3 segundos (tempo suficiente para a torre se acomodar no chão)
+        if (tempoDecorrido > 3.0f) {
+            btRigidBody* rb = bloco->getRigidBody();
+            if (rb) {
+                // Se o damping ainda está alto (0.9), voltamos para o normal (0.1 ou 0.0)
+                if (rb->getLinearDamping() > 0.5f) {
+                    rb->setDamping(0.1f, 0.1f);
+                }
+                
+                // Opcional: Agora sim podemos deixar eles dormirem se estiverem parados
+                if (rb->getLinearVelocity().length2() < 0.01f) {
+                     // rb->setActivationState(ISLAND_SLEEPING); // Descomente se quiser otimizar CPU
+                }
+            }
+        }
     }
 
     // Atualiza lógica do pássaro
@@ -1029,16 +1034,28 @@ void timer(int value) {
         }
     }
 
-    for (auto& porco : porcos) {
-        porco->atualizar(deltaTime);
-    }
+    // 1. Corrige os PORCOS
+        for (auto& porco : porcos) {
+            if (porco->getRigidBody()) {
+                // Tira o "peso" artificial e deixa cair normal
+                if (porco->getRigidBody()->getLinearDamping() > 0.1f) {
+                    porco->getRigidBody()->setDamping(0.0f, 0.0f); 
+                }
+                // Garante que a gravidade esteja ligada
+                porco->getRigidBody()->activate(true); 
+            }
+        }
 
-    
-    // --- EM VEZ DE: if (canhao) canhao->atualizar... ---
-    // FAÇA ISTO:
-    for (auto& c : canhoes) {
-        c->atualizar(deltaTime);
-    }
+        // 2. Corrige os CANHÕES
+        for (auto& c : canhoes) {
+            if (c->getRigidBody()) {
+                if (c->getRigidBody()->getLinearDamping() > 0.1f) {
+                    c->getRigidBody()->setDamping(0.0f, 0.0f);
+                }
+                c->getRigidBody()->activate(true);
+            }
+        }
+
 
     g_particleManager.update(deltaTime);
 

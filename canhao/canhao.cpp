@@ -1,5 +1,6 @@
 #include "canhao.h"
 #include "../blocos/ParticleManager.h"
+#include "../controle_audio/audio_manager.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -7,8 +8,10 @@
 
 extern ParticleManager g_particleManager;
 
+extern AudioManager g_audioManager;
+
 Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* world, btVector3 targetPos)
-    : Porco(posX, posY, posZ, 0.5f, 3.0f), // Scale 3.0f similar to pigs
+    : Porco(posX, posY, posZ, 0.5f, 1.4f), // Scale 3.0f similar to pigs
       timeSinceLastShot(0.0f),
       shootInterval(15.0f), // Intervalo reduzido para 3 segundos para teste
       targetPosition(targetPos),
@@ -133,6 +136,7 @@ void Cannon::shoot() {
     projectiles.push_back(projectile);
     std::cout << "Canhao atirou!" << std::endl;
 
+    g_audioManager.playPassaro(SomTipo::SOM_CANHAO, 100);
     // Efeito de explosão ao atirar
     g_particleManager.createFireExplosion(spawnPos, 20, 1.0f);
 }

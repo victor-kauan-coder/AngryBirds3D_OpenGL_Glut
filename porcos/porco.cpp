@@ -6,7 +6,9 @@
 #include "../util/openGL_util.h"
 #include "porco.h"
 #include <iostream>
+#include "../controle_audio/audio_manager.h"
 
+extern AudioManager g_audioManager;
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -17,7 +19,7 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       motionState(nullptr),
       mundoFisica(nullptr),
       escala(escalaInicial),
-      raioColisao(raio),
+      raioColisao(0.5f),
       ativo(true),
       vidaMaxima(100.0f),
       vida(10.0f),
@@ -150,6 +152,7 @@ void Porco::atualizar(float deltaTime) {
         tempoDesdeSaida += deltaTime;
         if (tempoDesdeSaida >= tempoParaSumir) {
             std::cout << "Porco desapareceu apos sair da posicao!" << std::endl;
+            g_audioManager.playPassaro(SomTipo::MORTE_PORCO, 100);
             tomarDano(vidaMaxima + 1000.0f); // Mata instantaneamente
         }
     }
