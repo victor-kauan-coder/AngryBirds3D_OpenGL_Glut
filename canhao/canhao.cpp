@@ -13,7 +13,7 @@ extern AudioManager g_audioManager;
 Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* world, btVector3 targetPos)
     : Porco(posX, posY, posZ, 0.5f, 1.4f), // Scale 3.0f similar to pigs
       timeSinceLastShot(0.0f),
-      shootInterval(15.0f), // Intervalo reduzido para 3 segundos para teste
+      shootInterval(6.0f), // Intervalo reduzido para 3 segundos para teste
       targetPosition(targetPos),
       worldRef(world),
       lastVelocity(0,0,0),

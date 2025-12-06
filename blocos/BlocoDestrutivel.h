@@ -295,7 +295,7 @@ void aplicarDano(float dano) {
         if (estado == EstadoDano::MORRENDO || estado == EstadoDano::DESTRUIDO) return;
 
         saudeAtual -= dano;
-        if(dano >= 0.5f) g_audioManager.playColisao(tipoMaterial, 70);
+        if(dano >= 0.5f) g_audioManager.playColisao(tipoMaterial, 30);
         // --- Lógica de Troca de Textura (Dano) ---
         if (saudeAtual <= saudeTotal * 0.5f && estado == EstadoDano::INTEIRO) {
             // printf("Bloco danificado!\n");

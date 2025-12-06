@@ -171,7 +171,7 @@ void SlingshotManager::handleMouseScroll(int button) {
         if (button == 4) { 
             pouchPullDepthZ += 0.3f;
             if (pouchPullDepthZ > 6.0f) pouchPullDepthZ = 6.0f;
-            g_audioManager.playSlingshot(true);
+            g_audioManager.playSlingshot(true, 30);
             printf("Scroll UP. Profundidade: %.2f\n", pouchPullDepthZ);
             
         // Scroll DOWN (Geralmente 4): Puxa 'para frente' (diminui Z)
@@ -275,7 +275,7 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
                 // ...LANCE!
                 launchProjectile();
 
-                g_audioManager.playSlingshot(false,75);
+                g_audioManager.playSlingshot(false,90);
                 std::string tipo_passaro = projectileRef->getTipo();
 
                 if (tipo_passaro == "Bomb") {

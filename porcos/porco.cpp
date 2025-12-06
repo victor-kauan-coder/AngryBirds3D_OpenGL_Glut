@@ -26,7 +26,7 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       massa(2.0f),
       tipo("Porco"),
       restituicao(0.5f),
-      friccao(0.8f),
+      friccao(1.4f),
       amortecimentoLinear(0.2f),
       amortecimentoAngular(0.2f),
       posicaoInicial(0,0,0),

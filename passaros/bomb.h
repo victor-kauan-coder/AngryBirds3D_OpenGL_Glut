@@ -124,7 +124,7 @@ public:
         }
         
         // Opcional: Efeito visual ou sonoro aqui
-        g_audioManager.playPassaro(SomTipo::EXPLOSAO, 100);
+        g_audioManager.playPassaro(SomTipo::EXPLOSAO, 55);
     }
 };
 #endif // BOMB_H

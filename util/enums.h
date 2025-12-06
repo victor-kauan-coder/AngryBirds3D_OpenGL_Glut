@@ -11,3 +11,9 @@ enum class MaterialTipo {
     PEDRA,
     GELO
 };
+
+
+enum class MusicaTipo {
+    MENU,
+    JOGO
+};

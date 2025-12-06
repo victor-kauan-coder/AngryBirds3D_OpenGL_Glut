@@ -74,7 +74,7 @@ bool blockModelLoaded = false;
 //MENU
 GameMenu* g_menu = nullptr; // Ponteiro para o menu
 GameState g_currentState = STATE_MENU;
-
+static float ultimoSomImpacto = 0.0f;
 
 GLuint g_skyTextureID = 0;
 
@@ -404,25 +404,52 @@ void initBullet() {
             currentY += pilarH + placaH + margin;
         }
 
-        // --- TOPO DA TORRE ---
-        float yTopoPilar = currentY + (pilarH / 2.0f);
+    float yTopoPilar = currentY + (pilarH / 2.0f);
         float yTopoPlaca = currentY + pilarH + (placaH / 2.0f) + margin;
+
+        // CORREÇÃO CRÍTICA:
+        // No loop anterior, você usou 'float offsetZ = 3.0f'.
+        // O topo precisa acompanhar esse mesmo deslocamento para ficar em cima!
+        float zCentroReal = centroZTorre + 3.0f; 
+
+        // Distância dos pilares para os cantos (para ficarem na borda da placa)
+        float offsetCanto = 2.2f * unit; 
+
+        // --- CRIANDO OS 4 PILARES DE SUPORTE (Mesa) ---
         
+        // 1. Frente-Esquerda
         blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
-        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPilar, centroZTorre), rot);
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre - offsetCanto, yTopoPilar, zCentroReal + offsetCanto), rot);
         estabilizarRigidBody(blocos.back()->getRigidBody());
 
+        // 2. Frente-Direita
+        blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre + offsetCanto, yTopoPilar, zCentroReal + offsetCanto), rot);
+        estabilizarRigidBody(blocos.back()->getRigidBody());
+
+        // 3. Trás-Esquerda
+        blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre - offsetCanto, yTopoPilar, zCentroReal - offsetCanto), rot);
+        estabilizarRigidBody(blocos.back()->getRigidBody());
+
+        // 4. Trás-Direita
+        blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre + offsetCanto, yTopoPilar, zCentroReal - offsetCanto), rot);
+        estabilizarRigidBody(blocos.back()->getRigidBody());
+
+        // --- TETO ---
         blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPlaca, placaW, placaH, placaD));
-        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPlaca, centroZTorre), rot);
+        // Note o uso de 'zCentroReal' aqui também
+        blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPlaca, zCentroReal), rot);
         estabilizarRigidBody(blocos.back()->getRigidBody());
 
-        // Inimigo no Topo
+        // --- INIMIGO NO TOPO ---
         float yTopoFinal = yTopoPlaca + (placaH / 2.0f) + margin + 1.5f;
 
         if (idTorre == 2) { 
-             // Rei Porco no meio
-             Porco* p = new Porco(centroXTorre, yTopoFinal, centroZTorre);
-             p->inicializarFisica(dynamicsWorld, centroXTorre, yTopoFinal, centroZTorre);
+             // Rei Porco no meio (Usando zCentroReal)
+             Porco* p = new Porco(centroXTorre, yTopoFinal, zCentroReal);
+             p->inicializarFisica(dynamicsWorld, centroXTorre, yTopoFinal, zCentroReal);
              estabilizarRigidBody(p->getRigidBody());
              porcos.push_back(p);
         }
@@ -661,12 +688,17 @@ void mouse(int button, int state, int x, int y) {
     else {
         // Menu
         if (g_menu) {
+            GameState oldState = g_currentState; // Salva estado anterior
             GameState newState = g_menu->handleMouseClick(button, state, x, y, g_currentState);
             
-            if (newState == STATE_EXIT) {
-                exit(0);
+            // --- DETECTA MUDANÇA PARA O JOGO ---
+            if (oldState != STATE_GAME && newState == STATE_GAME) {
+                g_audioManager.playMusic(MusicaTipo::JOGO);
             }
-            g_currentState = newState;
+            // -----------------------------------
+
+            if (newState == STATE_EXIT) exit(0);
+            g_currentState = newState;;
         }
     }
     if (passaroAtual && passaroAtual->isEmVoo() && button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN ) {
@@ -702,6 +734,7 @@ void keyboard(unsigned char key, int x, int y) {
         } 
         else if (g_currentState == STATE_SETTINGS) {
             g_currentState = STATE_MENU; // Volta das configurações para o menu principal
+            g_audioManager.playMusic(MusicaTipo::MENU);
             return;
         } 
         else if (g_currentState == STATE_MENU) {
@@ -884,67 +917,6 @@ void display() {
         c->desenhar();
     }
     
-
-    // Desenha todos os outros corpos rígidos (as caixas)
-    // for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-    //     btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-    //     btRigidBody* body = btRigidBody::upcast(obj);
-        
-    //     if (body && body->getMotionState() && body->getInvMass() != 0) {
-            
-    //         // Pula o 'passaroAtual', pois ele já foi desenhado acima
-    //         if (passaroAtual && body == passaroAtual->getRigidBody()) {
-    //             continue;
-    //         }
-            
-    //         btTransform trans;
-    //         body->getMotionState()->getWorldTransform(trans);
-    //         btScalar m[16];
-    //         trans.getOpenGLMatrix(m);
-            
-    //         glPushMatrix();
-    //         glMultMatrixf(m);
-            
-    //         btCollisionShape* shape = body->getCollisionShape();
-            
-    //         // CORREÇÃO: Mudado de 'else if' para 'if'
-    //         // Desenha apenas as caixas-alvo
-    //         if (shape == boxShape) {
-    //             glMaterialf(GL_FRONT, GL_SHININESS, 5.0f);
-                
-    //             // Verifica se o alvo está na mira
-    //             if (g_slingshotManager && g_slingshotManager->isTargetInAimLine(body)) {
-    //                 glColor3f(0.2f, 1.0f, 0.2f); // Verde
-    //             } else {
-    //                 glColor3f(0.6f, 0.4f, 0.2f); // Madeira
-    //             }
-                
-    //             if (blockModelLoaded) {
-    //                 // Se o modelo carregou, desenha o .obj
-    //                 glScalef(5.0, 5.0, 5.0);
-    //                 blockModel.draw();
-    //             } else {
-    //                 // Senão, desenha o cubo antigo como fallback
-    //                 glutSolidCube(1.0);
-    //             }
-                
-    //             // (Contorno da caixa)
-    //             // glDisable(GL_LIGHTING);
-    //             // glColor3f(0.3f, 0.2f, 0.1f);
-    //             // glLineWidth(2.0f);
-    //             // glBegin(GL_LINES);
-    //             // glVertex3f(-0.5f, 0.0f, -0.5f);
-    //             // glVertex3f(0.5f, 0.0f, -0.5f);
-    //             // glVertex3f(-0.5f, 0.0f, 0.5f);
-    //             // glVertex3f(0.5f, 0.0f, 0.5f);
-    //             // glEnd();
-    //             // glEnable(GL_LIGHTING);
-    //         }
-            
-    //         glPopMatrix();
-    //     }
-    // }
-    
     glMaterialf(GL_FRONT, GL_SHININESS, 10.0f);
 
     g_particleManager.draw();
@@ -963,67 +935,36 @@ void display() {
 }
 
 void timer(int value) {
-
     float deltaTime = 1.0f / 60.0f;
-    // --- CORREÇÃO 1: TEMPO DE SEGURANÇA ---
+    
     // Variável estática para contar quanto tempo o jogo está rodando.
-    // Usada para impedir que a torre quebre sozinha enquanto se acomoda (settling).
     static float tempoDecorrido = 0.0f;
     tempoDecorrido += deltaTime;
 
-    // DEBUG: Verifica se o estilingue está no mundo físico (A cada 2 segundos)
-        // static int frameCountDebug = 0;
-        // frameCountDebug++;
-        // if (frameCountDebug % 120 == 0 && g_slingshotManager && dynamicsWorld) {
-        //     btRigidBody* sb = g_slingshotManager->getRigidBody();
-        //     bool found = false;
-        //     for(int i=0; i<dynamicsWorld->getNumCollisionObjects(); i++) {
-        //         if(dynamicsWorld->getCollisionObjectArray()[i] == sb) found = true;
-        //     }
-        //     if(!found) {
-        //         printf("ALERTA CRITICO: SlingshotBody (%p) NAO esta no dynamicsWorld (%p)!\n", sb, dynamicsWorld);
-        //         printf("Total objetos no mundo: %d\n", dynamicsWorld->getNumCollisionObjects());
-        //     } else {
-        //          // printf("INFO: SlingshotBody presente.\n");
-        //     }
-        // }
-
-    // Simula a física
-    dynamicsWorld->stepSimulation(1.0f / 60.0f, 10, 1.0f / 180.0f);
+    // Simula a física (Verificação de segurança adicionada)
+    if (dynamicsWorld) {
+        dynamicsWorld->stepSimulation(deltaTime, 10, 1.0f / 180.0f);
+    }
     
-    // Atualiza lógica dos blocos
+    // ============================================================
+    // 1. ATUALIZAÇÃO DE LÓGICA DE JOGO (Sempre roda)
+    // ============================================================
+
+    // Atualiza Blocos
     for (auto& bloco : blocos) {
         bloco->update(deltaTime);
         bloco->clearContactFlag();
-
-        // --- CORREÇÃO: LIBERAR FÍSICA APÓS ESTABILIZAR ---
-        // Se já passaram 3 segundos (tempo suficiente para a torre se acomodar no chão)
-        if (tempoDecorrido > 3.0f) {
-            btRigidBody* rb = bloco->getRigidBody();
-            if (rb) {
-                // Se o damping ainda está alto (0.9), voltamos para o normal (0.1 ou 0.0)
-                if (rb->getLinearDamping() > 0.5f) {
-                    rb->setDamping(0.1f, 0.1f);
-                }
-                
-                // Opcional: Agora sim podemos deixar eles dormirem se estiverem parados
-                if (rb->getLinearVelocity().length2() < 0.01f) {
-                     // rb->setActivationState(ISLAND_SLEEPING); // Descomente se quiser otimizar CPU
-                }
-            }
-        }
     }
 
-    // Atualiza lógica do pássaro
+    // Atualiza Pássaro Atual
     if (passaroAtual) {
         passaroAtual->atualizar(deltaTime);
-        
-    if (!passaroAtual->isAtivo()) {
+        if (!passaroAtual->isAtivo()) {
             proximoPassaro();
         }
     }
 
-    // Atualiza pássaros extras (Blue clones)
+    // Atualiza Pássaros Extras
     for (auto it = extraBirds.begin(); it != extraBirds.end(); ) {
         (*it)->atualizar(deltaTime);
         if (!(*it)->isAtivo()) {
@@ -1034,19 +975,35 @@ void timer(int value) {
         }
     }
 
-    // 1. Corrige os PORCOS
+    // Atualiza Porcos
+    for (auto& porco : porcos) {
+        porco->atualizar(deltaTime);
+    }
+
+    // Atualiza Canhões (CRÍTICO: ISSO FAZ ELES ATIREM)
+    for (auto& c : canhoes) {
+        c->atualizar(deltaTime);
+    }
+
+    g_particleManager.update(deltaTime);
+
+
+    // ============================================================
+    // 2. CORREÇÃO DE ESTABILIDADE FÍSICA (Roda após 2~3 seg)
+    // ============================================================
+    // Isso "solta o freio" (tira o amortecimento) para os objetos caírem normal
+    
+    if (tempoDecorrido > 2.0f) {
+        // Solta os Porcos
         for (auto& porco : porcos) {
             if (porco->getRigidBody()) {
-                // Tira o "peso" artificial e deixa cair normal
                 if (porco->getRigidBody()->getLinearDamping() > 0.1f) {
                     porco->getRigidBody()->setDamping(0.0f, 0.0f); 
                 }
-                // Garante que a gravidade esteja ligada
                 porco->getRigidBody()->activate(true); 
             }
         }
-
-        // 2. Corrige os CANHÕES
+        // Solta os Canhões
         for (auto& c : canhoes) {
             if (c->getRigidBody()) {
                 if (c->getRigidBody()->getLinearDamping() > 0.1f) {
@@ -1055,187 +1012,143 @@ void timer(int value) {
                 c->getRigidBody()->activate(true);
             }
         }
+    }
 
-
-    g_particleManager.update(deltaTime);
-
-    // ==========================================================
-    // === LÓGICA DE COLISÃO E DANO ===
-    // ==========================================================
-    int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
-    for (int i = 0; i < numManifolds; i++) {
-        btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
-        const btCollisionObject* obA = contactManifold->getBody0();
-        const btCollisionObject* obB = contactManifold->getBody1();
-
-        // Variáveis para identificar quem colidiu
-        BlocoDestrutivel* blocoA = nullptr;
-        BlocoDestrutivel* blocoB = nullptr;
-        Porco* porco = nullptr;
-        
-        // Procura se obA é um bloco
-        for (auto& b : blocos) {
-            if (b->getRigidBody() == obA) { blocoA = b; break; }
-        }
-        // Procura se obB é um bloco
-        for (auto& b : blocos) {
-            if (b->getRigidBody() == obB) { blocoB = b; break; }
-        }
-
-        // Procura porcos
-        for (auto& p : porcos) {
-            if (p->getRigidBody() == obA || p->getRigidBody() == obB) {
-                porco = p; break;
-            }
-        }
-
-        // --- NOVA LÓGICA: Colisão Porco x Estilingue ---
-       if (g_slingshotManager) {
-            btRigidBody* slingshotBody = g_slingshotManager->getRigidBody();
-            
-            if (slingshotBody && (obA == slingshotBody || obB == slingshotBody)) {
-                // Identifica o outro objeto
-                const btCollisionObject* otherOb = (obA == slingshotBody) ? obB : obA;
-                
-                // VERIFICA SE O OBJETO É UM PORCO (PROJÉTIL)
-                // Percorre a lista de porcos para ver se algum deles é o que bateu
-                for (auto& p : porcos) {
-                    if (p->getRigidBody() == otherOb) {
-                        float velocity = p->getRigidBody()->getLinearVelocity().length();
-                        
-                        // Se houve impacto real
-                        if (velocity > 0.5f) { 
-                            // printf("DEBUG: Porco atingiu o estilingue! Vel: %.2f\n", velocity);
-                            g_slingshotManager->takeDamage();
-                            p->tomarDano(500.0f); // Destroi o projétil
-                            // contactManifold->clearManifold(); // Opcional
-                        }
-                        break; // Já achou o porco, sai do loop
-                    }
+    // Solta os Blocos (Um pouco depois, 3 segundos)
+    if (tempoDecorrido > 3.0f) {
+        for (auto& bloco : blocos) {
+            btRigidBody* rb = bloco->getRigidBody();
+            if (rb) {
+                if (rb->getLinearDamping() > 0.5f) {
+                    rb->setDamping(0.1f, 0.1f);
+                }
+                // Opcional: Otimização de sono para blocos parados
+                if (rb->getLinearVelocity().length2() < 0.01f) {
+                     // rb->setActivationState(ISLAND_SLEEPING); 
                 }
             }
         }
-                    
-        // Verifica se o pássaro está na colisão
-        bool passaroEnvolvido = passaroAtual && (obA == passaroAtual->getRigidBody() || obB == passaroAtual->getRigidBody());
+    }
 
-        // Calcula a força total da batida (Impulso)
-        float impulsoTotal = 0;
-        for (int j = 0; j < contactManifold->getNumContacts(); j++) {
-            impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
-        }
+    // ============================================================
+    // 3. LÓGICA DE COLISÃO E DANO
+    // ============================================================
+    if (dynamicsWorld) {
+        int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
+        for (int i = 0; i < numManifolds; i++) {
+            btPersistentManifold* contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
+            const btCollisionObject* obA = contactManifold->getBody0();
+            const btCollisionObject* obB = contactManifold->getBody1();
 
-        // --------------------------------------------------------
-        // CASO 1: BLOCO x BLOCO (Torre caindo sobre si mesma)
-        // --------------------------------------------------------
-        if (blocoA && blocoB) {
-            // Só processa após 2 segundos para evitar quebra no spawn
-            if (tempoDecorrido > 4.0f) {
-                // Impulso mínimo alto (3.0) para ignorar o peso de blocos parados
-                if (impulsoTotal > 8.0f) {
-                    // Dano reduzido (0.15) pois colisões entre blocos são frequentes
+            BlocoDestrutivel* blocoA = nullptr;
+            BlocoDestrutivel* blocoB = nullptr;
+            Porco* porco = nullptr;
+            
+            for (auto& b : blocos) {
+                if (b->getRigidBody() == obA) { blocoA = b; break; }
+            }
+            for (auto& b : blocos) {
+                if (b->getRigidBody() == obB) { blocoB = b; break; }
+            }
+            for (auto& p : porcos) {
+                if (p->getRigidBody() == obA || p->getRigidBody() == obB) {
+                    porco = p; break;
+                }
+            }
+
+            // Colisão Estilingue x Porco (Projétil)
+            if (g_slingshotManager) {
+                btRigidBody* slingshotBody = g_slingshotManager->getRigidBody();
+                if (slingshotBody && (obA == slingshotBody || obB == slingshotBody)) {
+                    const btCollisionObject* otherOb = (obA == slingshotBody) ? obB : obA;
+                    for (auto& p : porcos) {
+                        if (p->getRigidBody() == otherOb) {
+                            if (p->getRigidBody()->getLinearVelocity().length() > 0.5f) { 
+                                g_slingshotManager->takeDamage();
+                                p->tomarDano(500.0f);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+                        
+            bool passaroEnvolvido = passaroAtual && (obA == passaroAtual->getRigidBody() || obB == passaroAtual->getRigidBody());
+
+            float impulsoTotal = 0;
+            for (int j = 0; j < contactManifold->getNumContacts(); j++) {
+                impulsoTotal += contactManifold->getContactPoint(j).getAppliedImpulse();
+            }
+
+            // Dano Bloco x Bloco
+            if (blocoA && blocoB) {
+                if (tempoDecorrido > 4.0f && impulsoTotal > 8.0f) {
                     float dano = impulsoTotal * 0.15f; 
                     blocoA->aplicarDano(dano);
                     blocoB->aplicarDano(dano);
                 }
             }
-        }
-
-        // --------------------------------------------------------
-        // CASO 2: BLOCO x PÁSSARO (Impacto direto)
-        // --------------------------------------------------------
-        else if ((blocoA || blocoB) && passaroEnvolvido) {
-            BlocoDestrutivel* alvo = (blocoA) ? blocoA : blocoB;
-            
-            // Dano quadrático (Energia cinética simulada)
-            float dano = (impulsoTotal * impulsoTotal) * 0.005f; 
-            
-            if (dano > 1.2f) { 
-                alvo->aplicarDano(dano);
-            }
-        }
-
-        // --------------------------------------------------------
-        // CASO 3: BLOCO x CHÃO (Queda)
-        // --------------------------------------------------------
-        else if ((blocoA || blocoB) && (obA == groundRigidBody || obB == groundRigidBody)) {
-            // Só processa após 2 segundos
-            if (tempoDecorrido > 2.0f) {
+            // Dano Pássaro x Bloco
+            else if ((blocoA || blocoB) && passaroEnvolvido) {
                 BlocoDestrutivel* alvo = (blocoA) ? blocoA : blocoB;
-                
-                // Verifica se houve impacto real (não apenas estar encostado)
-                if (impulsoTotal > 1.0f) {
-                    btVector3 vel = alvo->getRigidBody()->getLinearVelocity();
-                    
-                    // CORREÇÃO CRUCIAL: Usa apenas a velocidade vertical (Y) invertida.
-                    // Se o bloco deslizar de lado (X/Z), ele não quebra. Só quebra se cair (Y).
-                    float velocidadeQueda = -vel.getY(); 
-
+                float dano = (impulsoTotal * impulsoTotal) * 0.005f; 
+                if (dano > 1.2f) {
+                    alvo->aplicarDano(dano);
+                    // (Aqui você pode adicionar sua lógica de som se quiser)
+                }
+            }
+            // Dano Bloco x Chão
+            else if ((blocoA || blocoB) && (obA == groundRigidBody || obB == groundRigidBody)) {
+                if (tempoDecorrido > 2.0f && impulsoTotal > 1.0f) {
+                    BlocoDestrutivel* alvo = (blocoA) ? blocoA : blocoB;
+                    float velocidadeQueda = -alvo->getRigidBody()->getLinearVelocity().getY(); 
                     if (velocidadeQueda > 5.0f) { 
-                        float dano = velocidadeQueda * 3.0f; // Multiplicador para converter velocidade em dano
-                        alvo->aplicarDano(dano);
+                        alvo->aplicarDano(velocidadeQueda * 3.0f);
                     }
                 }
             }
-        }
-
-        // --------------------------------------------------------
-        // CASO 4: PORCOS (Dano genérico por impacto)
-        // --------------------------------------------------------
-        if (porco) {
-            // Proteção de tempo opcional para os porcos também
-            if (tempoDecorrido > 1.0f && impulsoTotal > 1.5f) {
-                porco->tomarDano(impulsoTotal * 0.2f);
+            // Dano Porco
+            if (porco) {
+                if (tempoDecorrido > 1.0f && impulsoTotal > 1.5f) {
+                    porco->tomarDano(impulsoTotal * 0.2f);
+                }
             }
         }
     }
 
-    // ==========================================================
-    // === LIMPEZA E PONTUAÇÃO ===
-    // ==========================================================
+    // ============================================================
+    // 4. LIMPEZA E REDISPLAY
+    // ============================================================
 
-    // 1. Remove blocos destruídos da memória e do mundo
+    // Limpa blocos destruídos
     for (int i = blocos.size() - 1; i >= 0; i--) {
         if (blocos[i]->isDestruido()) {
             blocos[i]->limparFisica(dynamicsWorld);
             delete blocos[i];
             blocos.erase(blocos.begin() + i);
-            // score += 50; // Opcional: Pontos por destruir blocos
         }
     }
 
-    // 2. Atualiza o estilingue
-    if (g_slingshotManager) {
-        g_slingshotManager->update();
-    }
+    if (g_slingshotManager) g_slingshotManager->update();
     
-    // 3. Remove objetos que caíram do mundo (Abismo) e dá pontos
-    for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-        btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-        btRigidBody* body = btRigidBody::upcast(obj);
-        
-        if (body && body->getCollisionShape() == boxShape) { // Assume que boxShape são os blocos/porcos
-            btTransform trans;
-            body->getMotionState()->getWorldTransform(trans);
-            float y = trans.getOrigin().getY();
+    // Limpa objetos no abismo
+    if (dynamicsWorld) {
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
             
-            // Se caiu muito abaixo do chão
-            if (y < -2.0f) {
-                score += 100;
-                
-                // Remove da lista de alvos do pássaro (se houver essa lógica)
-                auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
-                if (it != targetBodies.end()) {
-                    targetBodies.erase(it);
+            if (body && body->getCollisionShape() == boxShape) { 
+                btTransform trans;
+                body->getMotionState()->getWorldTransform(trans);
+                if (trans.getOrigin().getY() < -2.0f) {
+                    score += 100;
+                    auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
+                    if (it != targetBodies.end()) targetBodies.erase(it);
+                    
+                    dynamicsWorld->removeRigidBody(body);
+                    delete body->getMotionState();
+                    delete body;
                 }
-                
-                // Remove do mundo físico
-                dynamicsWorld->removeRigidBody(body);
-                delete body->getMotionState();
-                delete body;
-                
-                // Nota: O ponteiro na lista 'blocos' ficará inválido aqui se não for tratado.
-                // O ideal é que a limpeza acima (isDestruido) trate disso, ou marcar o bloco como destruído aqui.
             }
         }
     }
@@ -1243,7 +1156,6 @@ void timer(int value) {
     glutPostRedisplay();
     glutTimerFunc(16, timer, 0);
 }
-
 
 void reshape(int w, int h) {
     glViewport(0, 0, w, h);
@@ -1357,6 +1269,7 @@ void init() {
 void carregarJogo(int value) {
     if (!jogoCarregado) {
         printf("=== INICIANDO CARREGAMENTO DOS RECURSOS ===\n");
+        
 
         // -------------------------------------------------------
         // AQUI ESTAVA O PESO (Criação dos Pássaros = Carregar OBJ/MTL)
@@ -1381,8 +1294,13 @@ void carregarJogo(int value) {
         if (!g_audioManager.initAudio()) {
             printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
         }
+
+        // --- ADICIONE ISTO ---
+        // Começa tocando a música do MENU
+        
         g_audioManager.setVolume(10.0f);
 
+        g_audioManager.playMusic(MusicaTipo::MENU);
         // Configura os callbacks de INTERAÇÃO (Mouse/Teclado)
         // Só ativamos isso agora, para o jogador não clicar durante o loading
         glutMouseFunc(mouse);

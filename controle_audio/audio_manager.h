@@ -12,6 +12,7 @@
 
 // Forward Declaration para o tipo SDL_mixer
 struct Mix_Chunk; 
+struct Mix_Music;
 
 // A extensão de áudio mais recomendada para portabilidade é OGG/WAV.
 #define AUDIO_EXTENSION ".wav" 
@@ -40,7 +41,10 @@ enum class SomTipo {
     MORTE_PASSARO,
     MORTE_PORCO, 
     SOM_CANHAO,
-    EXPLOSAO
+    EXPLOSAO,
+    COLISAO_CHUCK,
+    COLISAO_BOMB,
+    COLISAO_BLUE
 };
 
 /**
@@ -50,11 +54,18 @@ enum class SomTipo {
  */
 class AudioManager {
 private:
-    // Mapa para armazenar os recursos de som do SDL_mixer
+// Mapa para Efeitos Sonoros (Tiros, Colisões)
     std::map<SomTipo, Mix_Chunk*> soundChunks;
+    
+    // --- NOVO: Variáveis para Música ---
+    Mix_Music* musicaMenu = nullptr;
+    Mix_Music* musicaJogo = nullptr;
+    MusicaTipo musicaAtual;
+    bool musicaEstaTocando = false;
 
-    // Função interna para carregar um som (definida no .cpp)
+    // Funções auxiliares
     bool loadSound(SomTipo type, const std::string& path);
+    // ----------------------------------
     
 public:
     // Construtor vazio (a inicialização ocorre em initAudio)
@@ -87,7 +98,7 @@ public:
      * @param material O tipo de material destruído (usa o enum de enums.h).
      * @param volume Nível de volume (0 a 100).
      */
-    void playDestruction(MaterialTipo material, int volume = 60) {
+    void playDestruction(MaterialTipo material, int volume = 30) {
         switch (material) {
             case MaterialTipo::MADEIRA:
                 play(SomTipo::BLOCO_MADEIRA_DESTRUIDO, volume);
@@ -102,7 +113,7 @@ public:
                 break;
         }
     }
-    void playSlingshot(bool puxando,int volume=60) {
+    void playSlingshot(bool puxando,int volume=100) {
         SomTipo som = puxando ? SomTipo::ESTILINGUE_PUXANDO : SomTipo::ESTILINGUE_SOLTANDO;
         play(som,volume);
     }
@@ -110,7 +121,7 @@ public:
     void playPassaro(SomTipo tipoSom,int volume=50){
         play(tipoSom, volume);
     }
-    void playColisao(MaterialTipo material, int volume = 60){
+    void playColisao(MaterialTipo material, int volume = 30){
                 switch (material) {
             case MaterialTipo::MADEIRA:
                 play(SomTipo::COLISAO_MADEIRA, volume);
@@ -127,6 +138,11 @@ public:
     }
 
     void setVolume(float volumePercent);
+
+    void playMusic(MusicaTipo tipo); // Toca a música (loop infinito)
+
+    void stopMusic();
+
 };
 
 extern AudioManager g_audioManager;
