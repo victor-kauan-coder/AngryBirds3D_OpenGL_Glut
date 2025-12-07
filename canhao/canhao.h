@@ -23,6 +23,10 @@ public:
     void shoot();
     void setTarget(btVector3 target);
     Porco* getProjectile();
+
+    const std::vector<Porco*>& getProjectiles() const { 
+        return projectiles; 
+    }
     
     // Override to use box shape
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ);

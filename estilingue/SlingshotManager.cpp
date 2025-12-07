@@ -42,20 +42,25 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
       grabPouchStartZ(0),
       pouchPullDepthZ(0.0f),
       damageCount(0),
-      slingshotBody(nullptr)
+      slingshotBody(nullptr),
+      damageCooldown(0.0f)
 {
     initGeometry();
 }
 
 SlingshotManager::~SlingshotManager() {
     if (slingshotBody) {
-        // Nota: Se o worldRef já foi deletado (cleanupBullet), isso pode causar crash.
-        // Mas como cleanupBullet limpa os objetos antes de deletar o mundo, 
-        // o slingshotBody já deve ter sido removido do mundo.
-        // Aqui apenas garantimos a limpeza da memória do corpo e shape.
-        
+        // --- CORREÇÃO CRÍTICA PARA EVITAR CRASH ---
+        // É OBRIGATÓRIO remover o corpo do mundo antes de deletar o ponteiro.
+        // Se não fizermos isso, o 'cleanupBullet' vai tentar acessar memória morta depois.
+        if (worldRef) {
+            worldRef->removeRigidBody(slingshotBody);
+        }
+        // ------------------------------------------
+
         if (slingshotBody->getMotionState()) delete slingshotBody->getMotionState();
         if (slingshotBody->getCollisionShape()) delete slingshotBody->getCollisionShape();
+        
         delete slingshotBody;
         slingshotBody = nullptr;
     }
@@ -161,6 +166,9 @@ void SlingshotManager::draw() {
 void SlingshotManager::update() {
     // Esta função executa a pequena simulação de mola que faz
     // a malha balançar de volta ao centro quando solta.
+    if (damageCooldown > 0.0f) {
+        damageCooldown -= 0.016f; // Aproximadamente 1 frame (60 FPS)
+    }
     updateElasticReturnPhysics();
 }
 
@@ -274,22 +282,22 @@ void SlingshotManager::handleMouseClick(int button, int state, int x, int y) {
             if (isPouchGrabbed && isBeingPulled && projectileInPouch) {
                 // ...LANCE!
                 launchProjectile();
-
-                g_audioManager.playSlingshot(false,90);
+                printf("DEBUG: Tentando tocar som de soltar estilingue!\n");
+                g_audioManager.playSlingshot(false,100);
                 std::string tipo_passaro = projectileRef->getTipo();
 
                 if (tipo_passaro == "Bomb") {
-                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BOMB);
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BOMB, 75);
                 } 
                 else if (tipo_passaro == "Blue") {
-                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BLUE);
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_BLUE, 75);
                 } 
                 else if (tipo_passaro == "Chuck") {
-                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_CHUCK);
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO_CHUCK, 75);
                 } 
                 else {
                     // Default: Som do Red ou genérico
-                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO);
+                    g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO, 75);
                 }
                 
 
@@ -923,15 +931,18 @@ void SlingshotManager::screenToWorld(int screenX, int screenY, float depth, floa
 }
 
 void SlingshotManager::takeDamage() {
+    if (damageCooldown > 0.0f) return;
+
     damageCount++;
-    printf("Estilingue atingido! Dano: %d/3\n", damageCount);
+    damageCooldown = 2.0f; // <--- Fica invencível por 2 segundos após tomar tiro
     
-    // Toca som de madeira quebrando/colisão
+    printf("Estilingue atingido! Dano: %d/3\n", damageCount);
     g_audioManager.play(SomTipo::COLISAO_MADEIRA);
     
     if (damageCount >= 3) {
         triggerGameOver();
     }
+    g_audioManager.play(SomTipo::COLISAO_MADEIRA);
 }
 
 void SlingshotManager::triggerGameOver() {

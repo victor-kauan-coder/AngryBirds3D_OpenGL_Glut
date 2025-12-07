@@ -28,11 +28,11 @@ protected:
     float amortecimentoLinear;
     float amortecimentoAngular;
 
-    // Controle de desaparecimento por movimento
-    btVector3 posicaoInicial;
-    bool saiuDaPosicao;
-    float tempoDesdeSaida;
-    float tempoParaSumir;
+    float timerPulo;
+    float intervaloPulo;
+    
+    // --- NOVO: Controle de Dano Recente ---
+    float tempoSemDano; // Conta quanto tempo faz desde o último hit
 
 public:
     Porco(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f, 

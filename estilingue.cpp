@@ -1,3 +1,5 @@
+#define SDL_MAIN_HANDLED 
+#include <SDL2/SDL.h>
 #include <GL/glut.h>
 #include <GL/glu.h>
 #include <bullet/btBulletDynamicsCommon.h>
@@ -92,6 +94,8 @@ float cameraTargetY = 3.0f;
 int score = 0;
 int shotsRemaining = 8;
 bool gameOver = false;
+bool gameWon = false;  // Vitória
+bool gameLost = false; // Derrota
 
 std::vector<btRigidBody*> targetBodies;
 std::vector<Passaro*>::iterator itPassaroAtual; // Iterador para a fila
@@ -132,9 +136,9 @@ void proximoPassaro() {
         
         // Se ainda houver alvos, é Game Over (Derrota)
         // Se não houver alvos, a vitória já deve ter sido detectada em outro lugar
-        if (!targetBodies.empty()) {
-            gameOver = true;
-        }
+        // if (!targetBodies.empty()) {
+        //     gameOver = true;
+        // }
     }
 }
 
@@ -571,11 +575,27 @@ void drawGround() {
     glEnable(GL_LIGHTING);
 }
 
+void drawTextCentered(const char* text, float x, float y, void* font, float r, float g, float b) {
+    glColor3f(r, g, b);
+    int len = 0;
+    while(text[len]) len++; // strlen manual
+    
+    int width = 0;
+    for (int i = 0; i < len; i++) {
+        width += glutBitmapWidth(font, text[i]);
+    }
+    
+    glRasterPos2f(x - (width / 2.0f), y);
+    for (int i = 0; i < len; i++) {
+        glutBitmapCharacter(font, text[i]);
+    }
+}
 
 void drawHUD() {
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     
+    // Configura projeção 2D
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -585,85 +605,130 @@ void drawHUD() {
     glPushMatrix();
     glLoadIdentity();
     
-    glColor4f(0.0f, 0.0f, 0.0f, 0.5f);
-    glBegin(GL_QUADS);
-    glVertex2f(10, HEIGHT - 140);
-    glVertex2f(350, HEIGHT - 140);
-    glVertex2f(350, HEIGHT - 10);
-    glVertex2f(10, HEIGHT - 10);
-    glEnd();
-    
-    glColor3f(1.0f, 1.0f, 1.0f);
-    glRasterPos2f(20, HEIGHT - 30);
-
-    if (fps >= 55.0f) glColor3f(0.0f, 1.0f, 0.0f); // Verde
-    else if (fps >= 30.0f) glColor3f(1.0f, 1.0f, 0.0f); // Amarelo
-    else glColor3f(1.0f, 0.0f, 0.0f); // Vermelho
-
-    glRasterPos2f(WIDTH - 120, HEIGHT - 30); // Canto superior direito
-    char fpsText[30];
-    sprintf(fpsText, "FPS: %.1f", fps);
-    for (char* c = fpsText; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c); // Fonte negrito
-    }
-
-    char scoreText[50];
-    sprintf(scoreText, "Pontos: %d", score);
-    for (char* c = scoreText; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-    }
-    
-    glRasterPos2f(20, HEIGHT - 60);
-    char shotsText[50];
-    sprintf(shotsText, "Tiros: %d", shotsRemaining);
-    for (char* c = shotsText; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-    }
-    
-    glColor3f(0.8f, 0.8f, 0.8f);
-    glRasterPos2f(20, HEIGHT - 90);
-    char* controlText1 = (char*)"Q/E: Aumentar/Diminuir Profundidade";
-    for (char* c = controlText1; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
-    }
-    
-    glRasterPos2f(20, HEIGHT - 110);
-    char depthText[50];
-    // CORRIGIDO: Usa texto estático, já que 'pullDepth' não é mais global.
-    sprintf(depthText, "Profundidade: (pressione Q/E)"); 
-    for (char* c = depthText; *c != '\0'; c++) {
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
-    }
-    
-    if (gameOver) {
-        glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+    // --- HUD DURANTE O JOGO (Canto Superior) ---
+    if (!gameOver && !gameWon && !gameLost) {
+        // Fundo do HUD superior
+        glColor4f(0.0f, 0.0f, 0.0f, 0.5f);
         glBegin(GL_QUADS);
-        glVertex2f(WIDTH/2 - 200, HEIGHT/2 - 100);
-        glVertex2f(WIDTH/2 + 200, HEIGHT/2 - 100);
-        glVertex2f(WIDTH/2 + 200, HEIGHT/2 + 100);
-        glVertex2f(WIDTH/2 - 200, HEIGHT/2 + 100);
+            glVertex2f(0, HEIGHT);
+            glVertex2f(0, HEIGHT - 60);
+            glVertex2f(WIDTH, HEIGHT - 60);
+            glVertex2f(WIDTH, HEIGHT);
+        glEnd();
+
+        // FPS e Pontos
+        char hudText[100];
+        
+        // Cor do FPS (Verde/Amarelo/Vermelho)
+        float fpsR = (fps < 30) ? 1.0f : ((fps < 55) ? 1.0f : 0.0f);
+        float fpsG = (fps >= 30) ? 1.0f : 0.0f;
+        
+        sprintf(hudText, "FPS: %.1f", fps);
+        drawTextCentered(hudText, WIDTH - 80, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, fpsR, fpsG, 0.0f);
+
+        sprintf(hudText, "Pontos: %d", score);
+        drawTextCentered(hudText, WIDTH / 2, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
+
+        sprintf(hudText, "Tiros: %d", shotsRemaining);
+        drawTextCentered(hudText, 80, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
+        
+        // Instruções discretas no canto inferior
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glRasterPos2f(10, 30);
+        const char* help = "Q/E: Profundidade  |  Mouse: Mirar e Atirar";
+        for (const char* c = help; *c != '\0'; c++) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
+    }
+
+    // --- TELA DE FIM DE JOGO (OVERLAY) ---
+    if (gameOver || gameWon || gameLost) {
+        // 1. Fundo escuro em toda a tela (Dimming)
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
+        glBegin(GL_QUADS);
+            glVertex2f(0, 0);
+            glVertex2f(WIDTH, 0);
+            glVertex2f(WIDTH, HEIGHT);
+            glVertex2f(0, HEIGHT);
+        glEnd();
+
+        // 2. Painel Central
+        float panelW = 400;
+        float panelH = 300;
+        float centerX = WIDTH / 2.0f;
+        float centerY = HEIGHT / 2.0f;
+        
+        // Fundo do Painel
+        glColor4f(0.2f, 0.2f, 0.2f, 0.9f); // Cinza escuro
+        glBegin(GL_QUADS);
+            glVertex2f(centerX - panelW/2, centerY - panelH/2);
+            glVertex2f(centerX + panelW/2, centerY - panelH/2);
+            glVertex2f(centerX + panelW/2, centerY + panelH/2);
+            glVertex2f(centerX - panelW/2, centerY + panelH/2);
         glEnd();
         
-        glColor3f(1.0f, 1.0f, 0.0f);
-        glRasterPos2f(WIDTH/2 - 80, HEIGHT/2 + 30);
-        char* gameOverText = (char*)"FIM DE JOGO!";
-        for (char* c = gameOverText; *c != '\0'; c++) {
-            glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, *c);
-        }
+        // Borda do Painel
+        glLineWidth(3.0f);
+        if (gameWon) {
+            glColor3f(0.2f, 0.8f, 0.2f);// Borda Verde se ganhou
+        } else {
+            glColor3f(0.8f, 0.2f, 0.2f);   
+        }// Borda Vermelha se perdeu
+            
         
+        glBegin(GL_LINE_LOOP);
+            glVertex2f(centerX - panelW/2, centerY - panelH/2);
+            glVertex2f(centerX + panelW/2, centerY - panelH/2);
+            glVertex2f(centerX + panelW/2, centerY + panelH/2);
+            glVertex2f(centerX - panelW/2, centerY + panelH/2);
+        glEnd();
+
+        // 3. Textos
+        char title[50];
+        char scoreMsg[50];
+        
+        if (gameWon) sprintf(title, "VITORIA!");
+        else sprintf(title, "FIM DE JOGO");
+        
+        sprintf(scoreMsg, "Pontuacao Final: %d", score);
+
+        // Desenha Título
+        drawTextCentered(title, centerX, centerY + 80, GLUT_BITMAP_TIMES_ROMAN_24, 1.0f, 1.0f, 1.0f);
+        
+        // Desenha Pontuação
+        drawTextCentered(scoreMsg, centerX, centerY + 20, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 0.0f); // Amarelo
+
+        // 4. Botão "REINICIAR"
+        float btnW = 200;
+        float btnH = 50;
+        float btnY = centerY - 80; // Posição Y do centro do botão
+
+        // Cor do botão (Verde se ganhou, Laranja se perdeu)
+        if (gameWon) glColor3f(0.2f, 0.6f, 0.2f);
+        else glColor3f(0.8f, 0.4f, 0.0f);
+
+        glBegin(GL_QUADS);
+            glVertex2f(centerX - btnW/2, btnY - btnH/2);
+            glVertex2f(centerX + btnW/2, btnY - btnH/2);
+            glVertex2f(centerX + btnW/2, btnY + btnH/2);
+            glVertex2f(centerX - btnW/2, btnY + btnH/2);
+        glEnd();
+
+        // Borda do botão (para dar destaque)
         glColor3f(1.0f, 1.0f, 1.0f);
-        glRasterPos2f(WIDTH/2 - 100, HEIGHT/2 - 10);
-        char finalScoreText[50];
-        sprintf(finalScoreText, "Pontuacao Final: %d", score);
-        for (char* c = finalScoreText; *c != '\0'; c++) {
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, *c);
-        }
+        glLineWidth(1.0f);
+        glBegin(GL_LINE_LOOP);
+            glVertex2f(centerX - btnW/2, btnY - btnH/2);
+            glVertex2f(centerX + btnW/2, btnY - btnH/2);
+            glVertex2f(centerX + btnW/2, btnY + btnH/2);
+            glVertex2f(centerX - btnW/2, btnY + btnH/2);
+        glEnd();
+
+        // Texto do Botão
+        drawTextCentered("REINICIAR", centerX, btnY - 5, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
         
-        glRasterPos2f(WIDTH/2 - 120, HEIGHT/2 - 50);
-        char* restartText = (char*)"Pressione R para reiniciar";
-        for (char* c = restartText; *c != '\0'; c++) {
-            glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
-        }
+        // Dica extra
+        drawTextCentered("(Ou pressione 'R')", centerX, centerY - 130, GLUT_BITMAP_HELVETICA_12, 0.7f, 0.7f, 0.7f);
     }
     
     glPopMatrix();
@@ -675,10 +740,149 @@ void drawHUD() {
     glEnable(GL_LIGHTING);
 }
 
+void resetGame() {
+    printf("--- INICIANDO RESET ---\n");
+
+    // 1. Desvincula o pássaro do estilingue
+    if (g_slingshotManager) {
+        g_slingshotManager->setProjectile(nullptr); 
+    }
+    passaroAtual = nullptr;
+
+    // 2. Limpa a fila de pássaros
+    for (auto* p : filaPassaros) {
+        if(p) {
+            p->limparFisica(); // Garante limpeza
+            delete p;
+        }
+    }
+    filaPassaros.clear();
+
+    // 3. Limpa Inimigos e Blocos (CORREÇÃO DO CRASH)
+    
+    // PORCOS
+    for (auto p : porcos) {
+        if(p) {
+            // Remove do mundo físico explicitamente antes de deletar
+            if (p->getRigidBody() && dynamicsWorld) {
+                dynamicsWorld->removeRigidBody(p->getRigidBody());
+            }
+            delete p; 
+        }
+    }
+    porcos.clear();
+
+    // CANHÕES
+    for (auto c : canhoes) {
+        if(c) {
+            // Remove do mundo físico explicitamente antes de deletar
+            if (c->getRigidBody() && dynamicsWorld) {
+                dynamicsWorld->removeRigidBody(c->getRigidBody());
+            }
+            delete c; 
+        }
+    }
+    canhoes.clear();
+
+    // BLOCOS (A Causa principal do erro 127)
+    for (auto b : blocos) {
+        if (b) {
+            // O destrutor passa nullptr, então OBRIGATORIAMENTE temos que 
+            // chamar limparFisica passando o mundo ATUAL antes de deletar.
+            b->limparFisica(dynamicsWorld); 
+            delete b; 
+        }
+    }
+    blocos.clear();
+
+    // Limpa Pássaros Extras (Blue)
+    for (auto e : extraBirds) {
+        if(e) {
+            e->limparFisica();
+            delete e;
+        }
+    }
+    extraBirds.clear();
+
+    // 4. Deleta o Estilingue
+    if (g_slingshotManager) {
+        // O destrutor do Manager cuida de remover o corpo estático se o worldRef for válido
+        delete g_slingshotManager;
+        g_slingshotManager = nullptr;
+    }
+
+    // 5. Destrói e Recria o Mundo Físico
+    // Agora é seguro chamar isso, pois a lista de objetos do Bullet deve estar vazia
+    // ou contendo apenas objetos que serão limpos seguramente.
+    initBullet(); 
+
+    for (auto& bloco : blocos) {
+        bloco->carregarTexturas();
+    }
+
+    // 6. Reseta Variáveis
+    score = 0;
+    shotsRemaining = 8;
+    gameOver = false;
+    gameWon = false;
+    gameLost = false;
+
+    // 7. Recria os Pássaros
+    for (int i = 0; i < 8; i+=3) {
+        filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
+        filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
+        filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
+        filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
+    }
+    
+    itPassaroAtual = filaPassaros.begin();
+    if (itPassaroAtual != filaPassaros.end()) {
+        passaroAtual = *itPassaroAtual;
+    }
+
+    // 8. Recria o Estilingue
+    g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
+    
+    if (passaroAtual) {
+        g_slingshotManager->setProjectile(passaroAtual);
+    }
+    
+    g_audioManager.playMusic(MusicaTipo::JOGO);
+    printf("--- RESET CONCLUIDO ---\n");
+}
 
 // --- Callbacks do GLUT ---
 //modificações para mostrar a tela inicial
 void mouse(int button, int state, int x, int y) {
+    // --- LÓGICA DE CLIQUE NO BOTÃO REINICIAR (NOVA) ---
+    if (gameOver || gameWon || gameLost) {
+        if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+            // Recalcula a posição do botão (mesma lógica do drawHUD)
+            float centerX = WIDTH / 2.0f;
+            float centerY = HEIGHT / 2.0f;
+            float btnY_center = centerY - 80;
+            float btnW = 200;
+            float btnH = 50;
+
+            // Importante: O mouse do GLUT tem Y=0 no topo. 
+            // O OpenGL (drawHUD) tem Y=0 no fundo.
+            // Convertemos o Y do mouse:
+            float mouseY_GL = HEIGHT - y; 
+
+            // Verifica colisão do mouse com o retângulo do botão
+            bool clicouX = (x >= centerX - btnW/2) && (x <= centerX + btnW/2);
+            bool clicouY = (mouseY_GL >= btnY_center - btnH/2) && (mouseY_GL <= btnY_center + btnH/2);
+
+            if (clicouX && clicouY) {
+                resetGame(); // Chama o reset se clicou no botão
+                return;
+            }
+        }
+        // Se o jogo acabou, não processa mais nada (não deixa atirar o estilingue)
+        return; 
+    }
+    // --------------------------------------------------
+
     if (g_currentState == STATE_GAME) {
         // Jogo normal
         if (g_slingshotManager) {
@@ -688,22 +892,23 @@ void mouse(int button, int state, int x, int y) {
     else {
         // Menu
         if (g_menu) {
-            GameState oldState = g_currentState; // Salva estado anterior
+            GameState oldState = g_currentState; 
             GameState newState = g_menu->handleMouseClick(button, state, x, y, g_currentState);
-            
-            // --- DETECTA MUDANÇA PARA O JOGO ---
             if (oldState != STATE_GAME && newState == STATE_GAME) {
+                g_audioManager.playPassaro(SomTipo::SAINDO_MENU, 100);
+                SDL_Delay(500);
                 g_audioManager.playMusic(MusicaTipo::JOGO);
-            }
-            // -----------------------------------
 
-            if (newState == STATE_EXIT) exit(0);
-            g_currentState = newState;;
+            }
+
+            if (newState == STATE_EXIT){ 
+                exit(0);
+            }
+            g_currentState = newState;
         }
     }
-    if (passaroAtual && passaroAtual->isEmVoo() && button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN ) {
-        passaroAtual->usarHabilidade();
-    }
+    
+    // Habilidade especial (mantida)
     if (passaroAtual && passaroAtual->isEmVoo() && button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN ) {
         passaroAtual->usarHabilidade();
     }
@@ -734,6 +939,8 @@ void keyboard(unsigned char key, int x, int y) {
         } 
         else if (g_currentState == STATE_SETTINGS) {
             g_currentState = STATE_MENU; // Volta das configurações para o menu principal
+            g_audioManager.playPassaro(SomTipo::ENTRANDO_MENU, 100);
+            SDL_Delay(500);
             g_audioManager.playMusic(MusicaTipo::MENU);
             return;
         } 
@@ -758,40 +965,7 @@ void keyboard(unsigned char key, int x, int y) {
             
         case 'r':
         case 'R':
-            // Lógica de reset global
-            score = 0;
-            shotsRemaining = 8;
-            gameOver = false;
-            
-            // Limpa a física do pássaro atual (pois pertence ao mundo antigo)
-            if (passaroAtual) {
-                passaroAtual->limparFisica();
-                passaroAtual->resetar(0,0,0);
-            }
-
-            // 1. Deleta o SlingshotManager ANTES de limpar o mundo
-            // Isso permite que o destrutor remova o corpo do mundo e delete a memória corretamente
-            if (g_slingshotManager) {
-                delete g_slingshotManager;
-                g_slingshotManager = nullptr;
-            }
-
-            // 2. Recria o mundo (cleanupBullet é chamado dentro)
-            initBullet(); 
-            
-            // 3. Cria o novo SlingshotManager com o NOVO mundo
-            g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
-            
-            // Reseta o pássaro atual para garantir que ele crie física no novo mundo se necessário
-            // (Na verdade, o SlingshotManager vai cuidar disso quando setProjectile for chamado ou no update)
-            if(passaroAtual) {
-                // passaroAtual->resetar(0,0,0); // Já chamado acima
-                if (g_slingshotManager) {
-                    g_slingshotManager->setProjectile(passaroAtual);
-                }
-            }
-
-            printf("Jogo reiniciado!\n");
+           resetGame();
             break;
         }
     }
@@ -830,13 +1004,13 @@ void specialKeys(int key, int x, int y) {
 void display() {
     if (!jogoCarregado) {
         DrawLoadingScreen(glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT));
-        return; // <--- IMPEDE A EXECUÇÃO DO RESTO DA FUNÇÃO
+        return;
     }
     frameCount++;
     int currentTime = glutGet(GLUT_ELAPSED_TIME);
     int timeInterval = currentTime - previousTime;
 
-    if (timeInterval > 1000) { // Atualiza a cada 1 segundo (1000ms)
+    if (timeInterval > 1000) {
         fps = frameCount / (timeInterval / 1000.0f);
         previousTime = currentTime;
         frameCount = 0;
@@ -934,6 +1108,28 @@ void display() {
     glutSwapBuffers();
 }
 
+bool verificarVitoria() {
+    // --- CORREÇÃO ---
+    // Removemos o "if (porcos.empty()) return false".
+    // Agora, se a lista estiver vazia (porque demos .erase em todos),
+    // o código vai pular os loops for e retornar true (VITÓRIA),
+    // que é exatamente o que queremos!
+
+    // Verifica se tem algum porco vivo sobrando
+    for (auto& p : porcos) {
+        if (p->isAtivo()) return false; // Ainda tem inimigo, não ganhou.
+    }
+    
+    // Verifica se tem algum canhão vivo sobrando
+    for (auto& c : canhoes) {
+        if (c->isAtivo()) return false; // Ainda tem inimigo, não ganhou.
+    }
+    
+    // Se passou pelos loops e não retornou false (ou se as listas estão vazias),
+    // significa que todos morreram.
+    return true; 
+}
+
 void timer(int value) {
     float deltaTime = 1.0f / 60.0f;
     
@@ -941,6 +1137,17 @@ void timer(int value) {
     static float tempoDecorrido = 0.0f;
     tempoDecorrido += deltaTime;
 
+    if (g_currentState != STATE_GAME) {
+        glutPostRedisplay();         // Redesenha (para o menu aparecer)
+        glutTimerFunc(16, timer, 0); // Mantém o loop rodando
+        return;                      // <--- CANCELA A FÍSICA E A LÓGICA ABAIXO
+    }
+
+    if (gameWon || gameLost || gameOver) {
+        glutPostRedisplay();
+        glutTimerFunc(16, timer, 0);
+        return;
+    }
     // Simula a física (Verificação de segurança adicionada)
     if (dynamicsWorld) {
         dynamicsWorld->stepSimulation(deltaTime, 10, 1.0f / 180.0f);
@@ -1059,15 +1266,39 @@ void timer(int value) {
             // Colisão Estilingue x Porco (Projétil)
             if (g_slingshotManager) {
                 btRigidBody* slingshotBody = g_slingshotManager->getRigidBody();
+                
                 if (slingshotBody && (obA == slingshotBody || obB == slingshotBody)) {
                     const btCollisionObject* otherOb = (obA == slingshotBody) ? obB : obA;
+                    
+                    // 1. Verifica Porcos normais (que caem da torre)
                     for (auto& p : porcos) {
                         if (p->getRigidBody() == otherOb) {
                             if (p->getRigidBody()->getLinearVelocity().length() > 0.5f) { 
                                 g_slingshotManager->takeDamage();
                                 p->tomarDano(500.0f);
                             }
-                            break;
+                            break; 
+                        }
+                    }
+
+                    // 2. Verifica Projéteis dos Canhões (NOVO)
+                    for (auto& canhao : canhoes) {
+                        // Pega a lista de balas deste canhão
+                        const auto& balas = canhao->getProjectiles();
+                        
+                        for (auto& bala : balas) {
+                            if (bala->getRigidBody() == otherOb) {
+                                // Se a bala bater rápido no estilingue
+                                if (bala->getRigidBody()->getLinearVelocity().length() > 0.5f) {
+                                    printf("Bala de canhao acertou o estilingue!\n");
+                                    g_slingshotManager->takeDamage();
+                                    
+                                    // A bala explode ao bater
+                                    bala->tomarDano(9999.0f); 
+                                    g_particleManager.createExplosion(bala->getPosicao(), btVector3(0,0,0));
+                                }
+                                break;
+                            }
                         }
                     }
                 }
@@ -1123,36 +1354,107 @@ void timer(int value) {
     // Limpa blocos destruídos
     for (int i = blocos.size() - 1; i >= 0; i--) {
         if (blocos[i]->isDestruido()) {
+            // ADICIONADO: Soma a pontuação antes de deletar
+            score += blocos[i]->getPontuacao(); 
+            
             blocos[i]->limparFisica(dynamicsWorld);
             delete blocos[i];
             blocos.erase(blocos.begin() + i);
         }
     }
 
+    // --- PORCOS (ADICIONADO) ---
+    for (int i = porcos.size() - 1; i >= 0; i--) {
+        // Se o porco não está ativo (morreu por dano ou caiu do mundo)
+        if (!porcos[i]->isAtivo()) {
+            score += 5000; // Valor fixo para cada porco (Angry Birds padrão)
+            
+            // Garante que a física foi limpa e deleta o objeto
+            porcos[i]->limparFisica(); 
+            delete porcos[i];
+            porcos.erase(porcos.begin() + i);
+        }
+    }
+
+    // --- CANHÕES (ADICIONADO) ---
+    for (int i = canhoes.size() - 1; i >= 0; i--) {
+        if (!canhoes[i]->isAtivo()) {
+            score += 3000; // Valor fixo para destruir canhões
+            
+            // Cannon herda de Porco, então limparFisica funciona
+            canhoes[i]->limparFisica(); 
+            delete canhoes[i];
+            canhoes.erase(canhoes.begin() + i);
+        }
+    }
+
     if (g_slingshotManager) g_slingshotManager->update();
     
-    // Limpa objetos no abismo
+    // Verifica objetos caindo no abismo (apenas para aplicar dano massivo, a pontuação é feita nos loops acima)
     if (dynamicsWorld) {
-        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-            btRigidBody* body = btRigidBody::upcast(obj);
-            
-            if (body && body->getCollisionShape() == boxShape) { 
+        // Blocos caindo
+        for (auto& b : blocos) {
+            if (!b->isDestruido() && b->getRigidBody()) {
                 btTransform trans;
-                body->getMotionState()->getWorldTransform(trans);
-                if (trans.getOrigin().getY() < -2.0f) {
-                    score += 100;
-                    auto it = std::find(targetBodies.begin(), targetBodies.end(), body);
-                    if (it != targetBodies.end()) targetBodies.erase(it);
-                    
-                    dynamicsWorld->removeRigidBody(body);
-                    delete body->getMotionState();
-                    delete body;
+                b->getRigidBody()->getMotionState()->getWorldTransform(trans);
+                if (trans.getOrigin().getY() < -10.0f) { 
+                    b->aplicarDano(99999.0f); // Mata o bloco (score será somado no próximo frame no loop acima)
+                }
+            }
+        }
+
+        // Porcos caindo (Se ainda estiverem ativos e com corpo)
+        for (auto& p : porcos) {
+            if (p->isAtivo() && p->getRigidBody()) {
+                if (p->getPosicao().getY() < -10.0f) {
+                    p->tomarDano(99999.0f); // Mata o porco (score será somado no próximo frame)
+                }
+            }
+        }
+
+        // Canhões caindo
+        for (auto& c : canhoes) {
+            if (c->isAtivo() && c->getRigidBody()) {
+                if (c->getPosicao().getY() < -10.0f) {
+                    c->tomarDano(99999.0f);
                 }
             }
         }
     }
+
+    if (g_currentState == STATE_GAME && !gameWon && !gameLost && verificarVitoria()) {
+        gameWon = true;
+        g_audioManager.stopMusic(); 
+        g_audioManager.playMusic(MusicaTipo::VITORIA);
+        printf("VITORIA: Todos os inimigos eliminados!\n");
+    }
+
+    // Derrota por falta de pássaros
+    if (g_currentState == STATE_GAME && !gameWon && !gameLost && passaroAtual == nullptr) {
+        gameLost = true;
+        g_audioManager.stopMusic();
+        g_audioManager.playMusic(MusicaTipo::DERROTA);
+        printf("DERROTA: Acabaram os passaros!\n");
+    }
     
+    // --- ADICIONE ESTE BLOCO AQUI ---
+    // Derrota por Destruição do Estilingue (gameOver vira true quando toma 3 tiros)
+    if (g_currentState == STATE_GAME && !gameWon && !gameLost && gameOver) {
+        gameLost = true; // Marca oficialmente como derrota para evitar repetição
+        
+        g_audioManager.stopMusic();
+        
+        g_audioManager.playMusic(MusicaTipo::DERROTA);
+        
+        printf("DERROTA: Estilingue destruido!\n");
+    }
+    
+    if (gameWon || gameOver) { // Use 'gameOver' aqui se for a variável de derrota
+        glutPostRedisplay();
+        glutTimerFunc(16, timer, 0);
+        return; // IMPORTANTE: Sai da função aqui
+    }
+
     glutPostRedisplay();
     glutTimerFunc(16, timer, 0);
 }

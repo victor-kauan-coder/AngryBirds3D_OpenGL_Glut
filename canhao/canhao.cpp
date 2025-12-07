@@ -136,7 +136,7 @@ void Cannon::shoot() {
     projectiles.push_back(projectile);
     std::cout << "Canhao atirou!" << std::endl;
 
-    g_audioManager.playPassaro(SomTipo::SOM_CANHAO, 100);
+    g_audioManager.playPassaro(SomTipo::SOM_CANHAO, 45);
     // Efeito de explosão ao atirar
     g_particleManager.createFireExplosion(spawnPos, 20, 1.0f);
 }

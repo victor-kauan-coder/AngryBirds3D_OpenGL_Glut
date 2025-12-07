@@ -1,7 +1,7 @@
 #include "audio_manager.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
-
+#include "../util/enums.h"
 // Definição da variável global declarada em audio_manager.h
 AudioManager g_audioManager;
 
@@ -39,6 +39,11 @@ bool AudioManager::initAudio() {
     musicaJogo = Mix_LoadMUS("song/musica_jogo.mp3");
     if (!musicaJogo) printf("Erro carregar musica jogo: %s\n", Mix_GetError());
 
+    somDerrota = Mix_LoadMUS("song/derrota.mp3");
+    if (!somDerrota) printf("Erro carregar musica jogo: %s\n", Mix_GetError());
+    somVitoria = Mix_LoadMUS("song/vitoria.mp3");
+    if (!somVitoria) printf("Erro carregar musica jogo: %s\n", Mix_GetError());
+
     // NOTA: Os caminhos agora procuram arquivos OGG (mais portáteis)
     // Se você só tiver WAV, mude AUDIO_EXTENSION para ".wav" e remova a flag MIX_INIT_OGG.
 
@@ -56,12 +61,18 @@ bool AudioManager::initAudio() {
         loadSound(SomTipo::COLISAO_PEDRA, "song/colisao_pedra" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_PASSARO, "song/colisao_red" AUDIO_EXTENSION)&&
         loadSound(SomTipo::MORTE_PASSARO, "song/passaro_morrendo" AUDIO_EXTENSION)&&
-        loadSound(SomTipo::MORTE_PASSARO, "song/porco_morrendo" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::MORTE_PORCO, "song/porco_morrendo" AUDIO_EXTENSION)&&
         loadSound(SomTipo::SOM_CANHAO, "song/som_canhao" AUDIO_EXTENSION)&&
         loadSound(SomTipo::EXPLOSAO, "song/explosao" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_BOMB, "song/colisao_bomb" AUDIO_EXTENSION)&&
         loadSound(SomTipo::COLISAO_CHUCK, "song/colisao_chuck" AUDIO_EXTENSION)&&
-        loadSound(SomTipo::COLISAO_BLUE, "song/colisao_blue" AUDIO_EXTENSION)) 
+        loadSound(SomTipo::COLISAO_BLUE, "song/colisao_blue" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::DANO_PORCO, "song/porco_dano" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::COLISAO_PORCO, "song/porco_colisao" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::PORCO, "song/porco_inicio" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::ENTRANDO_MENU, "song/menu confirm" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::SAINDO_MENU, "song/menu back" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::PORCO_PULANDO, "song/porco_pulo" AUDIO_EXTENSION)) 
     {
         printf("Audio carregado com sucesso.\n");
         return true;
@@ -73,9 +84,22 @@ bool AudioManager::initAudio() {
 
 void AudioManager::playMusic(MusicaTipo tipo) {
     Mix_Music* targetMusic = nullptr;
-
-    if (tipo == MusicaTipo::MENU) targetMusic = musicaMenu;
-    else if (tipo == MusicaTipo::JOGO) targetMusic = musicaJogo;
+    switch (tipo) {
+            case MusicaTipo::MENU:
+                targetMusic = musicaMenu;
+                break;
+            case MusicaTipo::JOGO:
+                targetMusic = musicaJogo;
+                break;
+            case MusicaTipo::VITORIA:
+                targetMusic = somVitoria;
+                break;
+            case MusicaTipo::DERROTA:
+                targetMusic = somDerrota;
+                break;
+            default:
+                break;
+        }
 
     if (targetMusic) {
         // Toca a música em loop (-1)
@@ -126,35 +150,37 @@ void AudioManager::play(SomTipo type, int volume) {
         int sdlVolume = (volume * MIX_MAX_VOLUME) / 100;
         Mix_VolumeChunk(chunk, sdlVolume);
         
-        // --- LÓGICA DE PRIORIDADE ---
-        int canal = -1; // -1 significa "qualquer canal livre"
+        // --- LÓGICA DE PRIORIDADE E RODÍZIO ---
+        int canal = -1; // -1 significa "qualquer canal livre não-reservado" (canais 4 a 31)
 
-        // Verifica se é um som de Pássaro ou Estilingue (Sons VIP)
-        // Você pode adicionar mais tipos aqui se quiser
+        // Verifica se é um som importante (VIP)
         bool ehSomImportante = (type == SomTipo::LANCAMENTO_PASSARO || 
                                 type == SomTipo::LANCAMENTO_PASSARO_CHUCK ||
                                 type == SomTipo::LANCAMENTO_PASSARO_BOMB ||
                                 type == SomTipo::LANCAMENTO_PASSARO_BLUE ||
                                 type == SomTipo::ESTILINGUE_SOLTANDO ||
-                                type == SomTipo::COLISAO_PASSARO);
+                                type == SomTipo::COLISAO_PASSARO ||
+                                type == SomTipo::MORTE_PASSARO ||
+                                type == SomTipo::PORCO);
 
         if (ehSomImportante) {
-            // Tenta tocar no canal 0 (Reservado VIP)
-            // Se o canal 0 estiver ocupado, o SDL_mixer tentará o próximo reservado automaticamente? 
-            // Não, precisamos especificar. Vamos forçar o canal 0 ou 1.
-            
-            // Mix_PlayChannel(canal, ...)
-            // Se usarmos um número >= 0, forçamos aquele canal.
-            // Vamos tentar usar um dos canais reservados (0 a 3).
-            
-            // Simples: Pássaros sempre tocam no canal 0 ou 1, atropelando o que estiver lá se necessário.
-            // Isso garante que o grito saia.
-            canal = 0; 
+            // --- NOVO: Sistema de Rodízio ---
+            // A variável 'static' mantém seu valor entre chamadas diferentes da função.
+            // Começa em 0, e a cada som importante, muda para o próximo.
+            static int proximoCanalReservado = 0;
+
+            canal = proximoCanalReservado;
+
+            // Avança para o próximo canal reservado (Temos 4 reservados: 0, 1, 2, 3)
+            proximoCanalReservado++;
+            if (proximoCanalReservado >= 4) {
+                proximoCanalReservado = 0; // Volta para o 0 (Loop)
+            }
         }
         
         // Toca o som
-        // Se canal for -1 (blocos), ele procura um livre entre 4 e 31.
-        // Se canal for 0 (pássaro), ele usa o 0 (que está protegido dos blocos).
+        // Se canal for -1: Toca em qualquer um do 4 ao 31.
+        // Se canal for 0, 1, 2 ou 3: Toca especificamente nele, sobrepondo se necessário, mas protegendo os outros.
         Mix_PlayChannel(canal, chunk, 0);
 
     } else {

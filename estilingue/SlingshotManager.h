@@ -15,6 +15,7 @@ class Passaro;
 class SlingshotManager {
 private:
     // --- Geometria do Estilingue (Posições) ---
+    float damageCooldown;
     float handleBaseX, handleBaseY, handleBaseZ;
     float leftArmBaseX, leftArmBaseY, leftArmBaseZ;
     float rightArmBaseX, rightArmBaseY, rightArmBaseZ;

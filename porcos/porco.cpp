@@ -7,11 +7,16 @@
 #include "porco.h"
 #include <iostream>
 #include "../controle_audio/audio_manager.h"
+#include <cstdlib>
 
 extern AudioManager g_audioManager;
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+float randomFloat(float min, float max) {
+    return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
+}
 
 Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial)
     : rigidBody(nullptr),
@@ -22,17 +27,16 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       raioColisao(0.5f),
       ativo(true),
       vidaMaxima(100.0f),
-      vida(10.0f),
+      vida(2.5f),
       massa(2.0f),
       tipo("Porco"),
       restituicao(0.5f),
-      friccao(1.4f),
+      friccao(9.0f),
       amortecimentoLinear(0.2f),
       amortecimentoAngular(0.2f),
-      posicaoInicial(0,0,0),
-      saiuDaPosicao(false),
-      tempoDesdeSaida(0.0f),
-      tempoParaSumir(3.0f) { // 3 segundos para sumir após sair da posição
+      timerPulo(0.0f),
+      intervaloPulo(0.0f),
+      tempoSemDano(0.0f) { // 3 segundos para sumir após sair da posição
     
     carregarModelo("Objetos/porco.obj");
     carregarMTL("Objetos/porco.mtl");
@@ -78,11 +82,14 @@ void Porco::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float 
     
     // Força a ativação do corpo para que a gravidade seja aplicada imediatamente
     rigidBody->activate(true);
-    
-    // Define a posição inicial para controle de desaparecimento
-    posicaoInicial = btVector3(posX, posY, posZ);
-    saiuDaPosicao = false;
-    tempoDesdeSaida = 0.0f;
+
+
+    timerPulo = 0.0f;
+    intervaloPulo = randomFloat(1.0f, 4.0f);
+
+    tempoSemDano = 0.0f;
+
+    g_audioManager.playPassaro(SomTipo::PORCO, 60);
 }
 
 void Porco::limparFisica() {
@@ -134,33 +141,38 @@ void Porco::desenhar() {
 }
 
 void Porco::atualizar(float deltaTime) {
-    if (!ativo) return;
-    
-    // Verifica se saiu da posição inicial
-    if (!saiuDaPosicao && rigidBody) {
-        btVector3 posAtual = getPosicao();
-        float dist = posAtual.distance(posicaoInicial);
-        // Se moveu mais que 1.0 unidade (ajuste conforme necessário)
-        if (dist > 1.0f) { 
-            saiuDaPosicao = true;
-            // std::cout << "Porco saiu da posicao inicial!" << std::endl;
-        }
-    }
+    tempoSemDano += deltaTime;
 
-    // Se já saiu da posição, conta o tempo para sumir
-    if (saiuDaPosicao) {
-        tempoDesdeSaida += deltaTime;
-        if (tempoDesdeSaida >= tempoParaSumir) {
-            std::cout << "Porco desapareceu apos sair da posicao!" << std::endl;
-            g_audioManager.playPassaro(SomTipo::MORTE_PORCO, 100);
-            tomarDano(vidaMaxima + 1000.0f); // Mata instantaneamente
+    // Só processa o pulo se estiver sem levar dano há mais de 4 segundos
+    if (tempoSemDano > 4.0f) {
+        timerPulo += deltaTime;
+
+        if (timerPulo >= intervaloPulo) {
+            btVector3 vel = rigidBody->getLinearVelocity();
+            
+            // Só pula se estiver quase parado no eixo Y
+            if (std::abs(vel.y()) < 0.2f) { 
+                rigidBody->activate(true); 
+                float forcaPulo = massa * 3.5f; 
+                rigidBody->applyCentralImpulse(btVector3(0, forcaPulo, 0));
+            }
+            g_audioManager.playPassaro(SomTipo::PORCO_PULANDO, 60);
+
+            timerPulo = 0.0f;
+            intervaloPulo = randomFloat(2.0f, 5.0f);
         }
+    } else {
+        // Se levou dano recentemente, zera o timer do pulo para ele não pular imediatamente
+        timerPulo = 0.0f;
     }
 }
 
 void Porco::tomarDano(float dano) {
     if (!ativo) return;
 
+    tempoSemDano = 0.0f;
+
+    g_audioManager.playPassaro(SomTipo::DANO_PORCO, 60);
     vida -= dano;
     std::cout << "Porco tomou " << dano << " de dano. Vida restante: " << vida << std::endl;
 
@@ -199,10 +211,10 @@ void Porco::resetar(float posX, float posY, float posZ) {
     vida = vidaMaxima;
     setAtivo(true);
     
-    // Reseta lógica de desaparecimento
-    posicaoInicial = btVector3(posX, posY, posZ);
-    saiuDaPosicao = false;
-    tempoDesdeSaida = 0.0f;
+    timerPulo = 0.0f;
+    intervaloPulo = randomFloat(1.0f, 3.0f);
+    
+    tempoSemDano = 0.0f; // <--- ADICIONE ISTO
 }
 
 btVector3 Porco::getPosicao() const {

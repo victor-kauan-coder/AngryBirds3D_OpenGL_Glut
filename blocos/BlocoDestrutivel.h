@@ -45,15 +45,14 @@ extern AudioManager g_audioManager;
 class BlocoDestrutivel : public OBJModel {
 private:
     float escalaVisual;
-    // --- ADICIONE ESTAS VARIÁVEIS PRIVADAS ---
-    // Timers para as animações
     bool estaAnimandoDano;
     float animDanoTimer;
     float animDanoDuracao;
     bool estaAnimandoDestruicao;
     float animDestruicaoTimer;
     float animDestruicaoDuracao;
-    // --- Propriedades de Jogo ---
+    
+    // ... variáveis de jogo ...
     float saudeTotal;
     float saudeAtual;
     float corR, corG, corB;
@@ -61,30 +60,42 @@ private:
     EstadoDano estado;
     MaterialTipo tipoMaterial;
 
-    // --- Propriedades de Física ---
+    // ... física ...
     bool isContactActive;
     btRigidBody* corpoRigido;
-    btVector3 dimensoes; // (w, h, d) - Meia-extensão (Half-Extents)
+    btVector3 dimensoes;
     float massa;
     float atrito;
-    float restituicao; // Quão "saltitante" é
+    float restituicao;
 
-    // --- Propriedades Visuais (Texturas) ---
-    // Nomes dos arquivos de textura
+    // ... texturas ...
     std::string texturaNomeInteiro;
     std::string texturaNomeDanificado;
-    // IDs das texturas carregadas na GPU
     GLuint texturaIDInteiro = 0;
     GLuint texturaIDDanificado = 0;
 
-    /**
-     * @brief Função utilitária para carregar uma textura da memória.
-     * (Adaptado de passaro.h)
-     */
+    // --- CACHE ESTÁTICO (A SOLUÇÃO DE PERFORMANCE) ---
+    // Isso guarda as texturas já carregadas na memória RAM
+    static std::map<std::string, GLuint>& getTextureCache() {
+        static std::map<std::string, GLuint> cache;
+        return cache;
+    }
+
     GLuint loadTexture(const char* filename) {
+        // 1. Verifica se já carregamos essa imagem antes
+        std::string strFilename(filename);
+        auto& cache = getTextureCache();
+        
+        if (cache.find(strFilename) != cache.end()) {
+            // Se já existe, retorna o ID imediatamente (Zero tempo de carregamento!)
+            return cache[strFilename];
+        }
+
+        // 2. Se não existe, carrega do disco (Lento, mas só acontece 1 vez)
         int width, height, nrChannels;
         stbi_set_flip_vertically_on_load(true);
         unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
+        
         if (!data) {
             printf("Aviso: Nao foi possivel carregar a textura %s\n", filename);
             return 0;
@@ -94,12 +105,20 @@ private:
         GLuint textureID;
         glGenTextures(1, &textureID);
         glBindTexture(GL_TEXTURE_2D, textureID);
+        
+        // Filtros para pixel art (nítido)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         stbi_image_free(data);
+
+        // 3. Salva no cache para a próxima vez
+        cache[strFilename] = textureID;
+        // printf("Textura carregada e cacheada: %s (ID: %d)\n", filename, textureID);
+        
         return textureID;
     }
 
@@ -139,7 +158,7 @@ public:
                 prefixoTextura = "pedra";
                 massa = 12.0f;
                 saudeTotal = 30.0f;
-                atrito = 10.0f;
+                atrito = 5.0f;
                 restituicao = 0.05f;
                 pontuacaoValor = 300;
                 corR = 0.4f; corG = 0.4f; corB = 0.4f;
