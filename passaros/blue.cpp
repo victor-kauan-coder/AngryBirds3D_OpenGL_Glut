@@ -1,9 +1,11 @@
 #include "blue.h"
 #include <cstdio>
 #include <vector>
+#include "../blocos/ParticleManager.h"
 
 // Declaração externa do vetor de pássaros extras (definido em estilingue.cpp)
 extern std::vector<Passaro*> extraBirds;
+extern ParticleManager g_particleManager;
 
 PassaroBlue::PassaroBlue(float posX, float posY, float posZ)
     : Passaro(posX, posY, posZ, 0.8f, 0.8f), habilidadeUsada(false) {
@@ -20,10 +22,12 @@ PassaroBlue::PassaroBlue(float posX, float posY, float posZ)
     void PassaroBlue::usarHabilidade() {
         if (habilidadeUsada || !isEmVoo() || !mundoFisica) return;
         
-        // printf("Habilidade Blue ativada: Multiplicar!\n");
+        printf("Habilidade Blue ativada: Multiplicar!\n");
         habilidadeUsada = true;
         
         btVector3 pos = getPosicao();
+        g_particleManager.createSmokeEffect(pos, 15); // Efeito ao usar habilidade
+
         btVector3 vel = getVelocidade();
         
         // 1. Cálculo vetorial para achar a "lateral" (Esquerda/Direita do pássaro)
@@ -36,37 +40,38 @@ PassaroBlue::PassaroBlue(float posX, float posY, float posZ)
             right = btVector3(1, 0, 0); // Define eixo X como lateral padrão
         }
         btVector3 spreadDir = right.cross(forward).normalized();
+            
 
-    
-    // --- CONFIGURAÇÃO DO EFEITO ---
-    float offsetInicial = 0.2f; 
-    float forcaSeparacao = 8.0f; // Força que empurra eles para cima/baixo
-    
-    // Cria 2 clones (i = -1 para baixo, i = 1 para cima)
-    for (int i = -1; i <= 1; i += 2) { 
         
-        PassaroBlue* clone = new PassaroBlue(*this);
+        // --- CONFIGURAÇÃO DO EFEITO ---
+        float offsetInicial = 0.2f; 
+        float forcaSeparacao = 8.0f; // Força que empurra eles para cima/baixo
         
-        clone->habilidadeUsada = true; 
-        
-        // --- MUDANÇA 1: POSIÇÃO (Usando spreadDir) ---
-        // Cria o clone deslocado verticalmente em relação à trajetória
-        btVector3 clonePos = pos + spreadDir * (offsetInicial * i);
-        
-        clone->inicializarFisica(mundoFisica, clonePos.x(), clonePos.y(), clonePos.z());
-        
-        // --- MUDANÇA 2: VELOCIDADE (Usando spreadDir) ---
-        if(clone->getRigidBody()){
-            clone->getRigidBody()->setActivationState(ACTIVE_TAG);
+        // Cria 2 clones (i = -1 para baixo, i = 1 para cima)
+        for (int i = -1; i <= 1; i += 2) { 
             
-            // Aplica a força de separação na direção vertical calculada
-            btVector3 velSeparacao = vel + (spreadDir * (forcaSeparacao * i));
+            PassaroBlue* clone = new PassaroBlue(*this);
             
-            // Removi o "empurrãozinho fixo (0,2,0)" para garantir que a abertura seja simétrica
+            clone->habilidadeUsada = true; 
             
-            clone->getRigidBody()->setLinearVelocity(velSeparacao); 
+            // --- MUDANÇA 1: POSIÇÃO (Usando spreadDir) ---
+            // Cria o clone deslocado verticalmente em relação à trajetória
+            btVector3 clonePos = pos + spreadDir * (offsetInicial * i);
+            
+            clone->inicializarFisica(mundoFisica, clonePos.x(), clonePos.y(), clonePos.z());
+            
+            // --- MUDANÇA 2: VELOCIDADE (Usando spreadDir) ---
+            if(clone->getRigidBody()){
+                clone->getRigidBody()->setActivationState(ACTIVE_TAG);
+                
+                // Aplica a força de separação na direção vertical calculada
+                btVector3 velSeparacao = vel + (spreadDir * (forcaSeparacao * i));
+                
+                // Removi o "empurrãozinho fixo (0,2,0)" para garantir que a abertura seja simétrica
+                
+                clone->getRigidBody()->setLinearVelocity(velSeparacao); 
+            }
+
+            extraBirds.push_back(clone);
         }
-
-        extraBirds.push_back(clone);
-    }
 }

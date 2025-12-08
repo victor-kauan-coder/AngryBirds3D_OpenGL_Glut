@@ -11,7 +11,7 @@ extern ParticleManager g_particleManager;
 extern AudioManager g_audioManager;
 
 Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* world, btVector3 targetPos)
-    : Porco(posX, posY, posZ, 0.5f, 1.4f), // Scale 3.0f similar to pigs
+    : Porco(posX, posY, posZ, 0.5f, 1.4f, 500), // Scale 3.0f similar to pigs, 500 points
       timeSinceLastShot(0.0f),
       shootInterval(6.0f), // Intervalo reduzido para 3 segundos para teste
       targetPosition(targetPos),
@@ -121,7 +121,8 @@ void Cannon::shoot() {
     
     // Create projectile (Porco)
     // Use a smaller scale for the projectile
-    projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f);    
+    // Passando 0 pontos para não gerar score popup ao morrer
+    projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f, 0);    
     // Load pig model for the projectile
     
     projectile->inicializarFisica(worldRef, spawnPos.x(), spawnPos.y(), spawnPos.z());

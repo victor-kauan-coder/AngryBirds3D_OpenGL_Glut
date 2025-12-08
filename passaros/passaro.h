@@ -42,6 +42,9 @@ protected:
     float tempoVoo;
     float tempoVidaMaximo;
     float tempoVooMaximo;
+    
+    // --- NOVO: Última posição conhecida (para quando o corpo físico é removido) ---
+    btVector3 ultimaPosicao;
 
     // --- VARIÁVEIS DA FILA ---
     bool naFila;
@@ -66,6 +69,7 @@ public:
           rotacaoVisualX(0.0f), rotacaoVisualY(1.0f), rotacaoVisualZ(0.0f), anguloVisual(M_PI),
           restituicao(0.6f), friccao(0.5f), amortecimentoLinear(0.1f), amortecimentoAngular(0.1f),
           tempoVida(0.0f), tempoVoo(0.0f), tempoVidaMaximo(1.0f), tempoVooMaximo(5.0f),
+          ultimaPosicao(posX, posY, posZ), // Inicializa com a posição inicial
           
           naFila(false), posFila(0,0,0), timerPuloFila(0.0f), 
           intervaloPuloFila(0.0f), pulandoFila(false), progressoPulo(0.0f),
@@ -223,6 +227,11 @@ public:
     
     virtual void atualizar(float deltaTime) {
         if (rigidBody) {
+            // Atualiza a última posição conhecida
+            btTransform transform; 
+            rigidBody->getMotionState()->getWorldTransform(transform);
+            ultimaPosicao = transform.getOrigin();
+
             btVector3 vel = rigidBody->getLinearVelocity();
             float velocidadeTotal = vel.length();
             if (emVoo) {
@@ -303,7 +312,7 @@ public:
     
     btVector3 getPosicao() const {
         if (naFila) return posFila; 
-        if (!rigidBody) return btVector3(0, 0, 0);
+        if (!rigidBody) return ultimaPosicao; // Retorna a última posição conhecida se não houver corpo
         btTransform transform; rigidBody->getMotionState()->getWorldTransform(transform);
         return transform.getOrigin();
     }

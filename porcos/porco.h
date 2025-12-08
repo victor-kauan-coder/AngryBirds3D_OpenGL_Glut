@@ -33,10 +33,11 @@ protected:
     
     // --- NOVO: Controle de Dano Recente ---
     float tempoSemDano; // Conta quanto tempo faz desde o último hit
+    int pontuacaoValor; // Valor de pontos ao destruir
 
 public:
     Porco(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f, 
-        float raio = 0.2f, float escalaInicial = 2.3f);
+        float raio = 0.2f, float escalaInicial = 2.3f, int pontos = 200);
     
     virtual ~Porco();
     

@@ -1209,6 +1209,7 @@ void timer(int value) {
     if (passaroAtual) {
         passaroAtual->atualizar(deltaTime);
         if (!passaroAtual->isAtivo()) {
+            g_particleManager.createSmokeEffect(passaroAtual->getPosicao(), 20);
             proximoPassaro();
         }
     }
@@ -1217,6 +1218,7 @@ void timer(int value) {
     for (auto it = extraBirds.begin(); it != extraBirds.end(); ) {
         (*it)->atualizar(deltaTime);
         if (!(*it)->isAtivo()) {
+            g_particleManager.createSmokeEffect((*it)->getPosicao(), 20);
             delete *it;
             it = extraBirds.erase(it);
         } else {

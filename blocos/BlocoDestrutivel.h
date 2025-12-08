@@ -265,6 +265,7 @@ public:
             if (corpoRigido) {
                 btVector3 pos = corpoRigido->getCenterOfMassPosition();
                 g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
+                g_particleManager.createScorePopup(pos, pontuacaoValor); // Popup de pontuação
                 g_audioManager.playDestruction(tipoMaterial);
             }
         }

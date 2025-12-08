@@ -43,12 +43,19 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
       pouchPullDepthZ(0.0f),
       damageCount(0),
       slingshotBody(nullptr),
-      damageCooldown(0.0f)
+      damageCooldown(0.0f),
+      slingshotModel(new OBJModel())
 {
+    slingshotModel->loadFromFile("Objetos/estilingue.obj");
+    slingshotModel->loadMTL("Objetos/estilingue.mtl");
     initGeometry();
 }
 
 SlingshotManager::~SlingshotManager() {
+    if (slingshotModel) {
+        delete slingshotModel;
+        slingshotModel = nullptr;
+    }
     if (slingshotBody) {
         // --- CORREÇÃO CRÍTICA PARA EVITAR CRASH ---
         // É OBRIGATÓRIO remover o corpo do mundo antes de deletar o ponteiro.
@@ -76,22 +83,27 @@ void SlingshotManager::initGeometry() {
     // Define a posição da base (cabo) e o início dos braços da forquilha
     float slingshotPosZ = 16.0f; // <-- Defina a profundidade aqui
 
-    // Define a posição da base (cabo) e o início dos braços da forquilha
-    handleBaseX = 0.0f;
-    handleBaseY = 0.0f;
-    handleBaseZ = slingshotPosZ; // <-- MUDADO
+    // Ajuste para coincidir com o modelo 3D escalado (8x) e transladado (+2.5Y)
+    // O modelo visual começa em Y=2.5.
+    // A forquilha do modelo parece estar bem mais alta agora.
     
+    handleBaseX = 0.0f;
+    handleBaseY = 2.5f; // Base visual começa em 2.5
+    handleBaseZ = slingshotPosZ; 
+    
+    // Ajustando a altura dos braços para acompanhar a escala
+    // Valores estimados visualmente para o modelo escalado em 8x
     leftArmBaseX = 0.0f;
-    leftArmBaseY = 3.0f;
-    leftArmBaseZ = slingshotPosZ; // <-- MUDADO
+    leftArmBaseY = 3.5f; // Baixando de 5.5 para 3.5
+    leftArmBaseZ = slingshotPosZ; 
     
     rightArmBaseX = 0.0f;
-    rightArmBaseY = 3.0f;
-    rightArmBaseZ = slingshotPosZ; // <-- MUDADO
+    rightArmBaseY = 3.5f; // Baixando de 5.5 para 3.5
+    rightArmBaseZ = slingshotPosZ; 
     
     // Define os parâmetros da forquilha (forma de "Y")
-    float armHeight = 2.5f; // Comprimento de cada braço da forquilha
-    float angle = 30.0f * M_PI / 180.0f; // Ângulo de 30 graus (convertido para radianos)
+    float armHeight = 1.5f; // Baixando de 3.0 para 1.5
+    float angle = 35.0f * M_PI / 180.0f; // Ângulo um pouco mais aberto
     
     // Calcula a posição da PONTA ESQUERDA da forquilha usando trigonometria
     leftForkTipX = leftArmBaseX + sin(angle) * armHeight;
@@ -670,22 +682,14 @@ void SlingshotManager::drawCylinder(float x1, float y1, float z1, float x2, floa
  * @brief Desenha a base de madeira usando a função drawCylinder.
  */
 void SlingshotManager::drawWoodenBase() {
-    glColor3f(0.30f, 0.18f, 0.06f); // Cor de madeira
-    
-    // Desenha o cabo (da base até o centro da forquilha)
-    drawCylinder(handleBaseX, handleBaseY, handleBaseZ,
-                 leftArmBaseX, leftArmBaseY, leftArmBaseZ,
-                 0.3); // Raio de 0.3
-    
-    // Desenha o braço esquerdo da forquilha
-    drawCylinder(leftArmBaseX, leftArmBaseY, leftArmBaseZ,
-                 leftForkTipX, leftForkTipY, leftForkTipZ,
-                 0.2); // Raio de 0.2
-    
-    // Desenha o braço direito da forquilha
-    drawCylinder(rightArmBaseX, rightArmBaseY, rightArmBaseZ,
-                 rightForkTipX, rightForkTipY, rightForkTipZ,
-                 0.2); // Raio de 0.2
+    glPushMatrix();
+    // Removemos o offset hardcoded (+2.5f) pois agora handleBaseY já é 2.5f
+    glTranslatef(handleBaseX, handleBaseY, handleBaseZ);
+    glScalef(8.0f, 8.0f, 8.0f);
+    if (slingshotModel) {
+        slingshotModel->draw();
+    }
+    glPopMatrix();
 
     // Desenha rachaduras se houver dano
     if (damageCount > 0) {
@@ -966,28 +970,48 @@ void SlingshotManager::drawCracks() {
     // Rachaduras simples (linhas aleatórias pré-definidas)
     glBegin(GL_LINES);
     
+    // Offset Z para garantir que a linha fique na frente do modelo
+    float zOffset = 0.4f; 
+
     if (damageCount >= 1) {
-        // Rachadura no cabo
-        glVertex3f(handleBaseX - 0.2f, handleBaseY + 1.0f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
+        // Rachadura no cabo (Base) - Mais embaixo
+        // Movendo para a parte inferior do cabo
+        glVertex3f(handleBaseX - 0.1f, handleBaseY - 0.5f, handleBaseZ + zOffset);
+        glVertex3f(handleBaseX + 0.1f, handleBaseY + 0.2f, handleBaseZ + zOffset);
         
-        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX - 0.1f, handleBaseY + 2.0f, handleBaseZ + 0.4f);
+        glVertex3f(handleBaseX + 0.1f, handleBaseY + 0.2f, handleBaseZ + zOffset);
+        glVertex3f(handleBaseX, handleBaseY + 0.6f, handleBaseZ + zOffset);
     }
     
     if (damageCount >= 2) {
-        // Rachadura no braço esquerdo
-        glVertex3f(leftArmBaseX, leftArmBaseY + 0.5f, leftArmBaseZ + 0.3f);
-        glVertex3f(leftArmBaseX - 0.3f, leftArmBaseY + 1.5f, leftArmBaseZ + 0.3f);
+        // Rachadura no braço esquerdo (Visualmente à direita) - Mais à direita
+        // Adicionando um offset em X para sair do "vazio" central
+        float shiftX = 0.4f; 
+
+        float x1 = leftArmBaseX + (leftForkTipX - leftArmBaseX) * 0.3f + shiftX;
+        float y1 = leftArmBaseY + (leftForkTipY - leftArmBaseY) * 0.3f;
+        
+        float x2 = leftArmBaseX + (leftForkTipX - leftArmBaseX) * 0.7f + shiftX;
+        float y2 = leftArmBaseY + (leftForkTipY - leftArmBaseY) * 0.7f;
+
+        glVertex3f(x1, y1, leftArmBaseZ + zOffset);
+        glVertex3f(x2, y2, leftArmBaseZ + zOffset);
     }
     
     if (damageCount >= 3) {
-        // Rachadura no braço direito (crítica)
-        glVertex3f(rightArmBaseX, rightArmBaseY + 0.5f, rightArmBaseZ + 0.3f);
-        glVertex3f(rightArmBaseX + 0.3f, rightArmBaseY + 1.5f, rightArmBaseZ + 0.3f);
+        // Rachadura no braço direito (Visualmente à esquerda)
+        float x1 = rightArmBaseX + (rightForkTipX - rightArmBaseX) * 0.3f;
+        float y1 = rightArmBaseY + (rightForkTipY - rightArmBaseY) * 0.3f;
         
-        glVertex3f(handleBaseX, handleBaseY + 2.5f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX, handleBaseY + 0.5f, handleBaseZ + 0.4f);
+        float x2 = rightArmBaseX + (rightForkTipX - rightArmBaseX) * 0.7f;
+        float y2 = rightArmBaseY + (rightForkTipY - rightArmBaseY) * 0.7f;
+
+        glVertex3f(x1, y1, rightArmBaseZ + zOffset);
+        glVertex3f(x2, y2, rightArmBaseZ + zOffset);
+        
+        // Rachadura extra no cabo
+        glVertex3f(handleBaseX, handleBaseY + 0.5f, handleBaseZ + zOffset);
+        glVertex3f(handleBaseX, handleBaseY + 1.5f, handleBaseZ + zOffset);
     }
 
     glEnd();

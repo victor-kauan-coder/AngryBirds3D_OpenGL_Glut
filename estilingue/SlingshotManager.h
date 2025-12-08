@@ -3,6 +3,7 @@
 
 // 1. Includes necessários para a DECLARAÇÃO
 #include <btBulletDynamicsCommon.h> 
+#include "../util/loads.h"
 
 // 2. ADICIONADO: Forward declaration para a classe Passaro
 // Isso evita a necessidade de incluir "passaro.h" no header.
@@ -45,6 +46,7 @@ private:
     // --- Dano e Colisão do Estilingue ---
     int damageCount;
     btRigidBody* slingshotBody; // Corpo físico do estilingue para colisões
+    OBJModel* slingshotModel; // Modelo 3D do estilingue
 
     // --- Funções Internas (Privadas) ---
     void clearProjectile();
