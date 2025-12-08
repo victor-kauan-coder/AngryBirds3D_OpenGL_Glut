@@ -84,7 +84,7 @@ GameState g_currentState = STATE_MENU;
 static float ultimoSomImpacto = 0.0f;
 
 GLuint g_skyTextureID = 0;
-
+GLuint g_heartTextureID = 0;
 //vetor para armazenar as arvores 
 std::vector<Tree> trees;
 // --- Variáveis Globais ---
@@ -624,10 +624,16 @@ void drawHUD() {
     glPushMatrix();
     glLoadIdentity();
     
-    // --- HUD DURANTE O JOGO (Canto Superior) ---
+    // --- HUD DURANTE O JOGO ---
     if (!gameOver && !gameWon && !gameLost) {
-        // Fundo do HUD superior
-        glColor4f(0.0f, 0.0f, 0.0f, 0.5f);
+        
+        // --- ATIVA A TRANSPARÊNCIA (CORREÇÃO AQUI) ---
+        // Isso garante que tanto a barra quanto os corações fiquem transparentes
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // 1. PRIMEIRO: Fundo do HUD (Barra Preta Translúcida)
+        glColor4f(0.0f, 0.0f, 0.0f, 0.8f); // 50% transparente
         glBegin(GL_QUADS);
             glVertex2f(0, HEIGHT);
             glVertex2f(0, HEIGHT - 60);
@@ -635,10 +641,56 @@ void drawHUD() {
             glVertex2f(WIDTH, HEIGHT);
         glEnd();
 
-        // FPS e Pontos
+        // 2. SEGUNDO: Corações de Vida (Desenhados SOBRE a barra)
+        if (g_heartTextureID != 0 && g_slingshotManager) {
+            int vidaAtual = g_slingshotManager->getHealth();
+            
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, g_heartTextureID);
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f); // Branco puro para a textura
+
+            float heartSize = 40.0f;
+            float marginX = 20.0f;
+            float marginY = 10.0f; 
+            float padding = 5.0f;
+            float startY = HEIGHT - marginY; 
+
+            glBegin(GL_QUADS);
+            for (int i = 0; i < vidaAtual; i++) {
+                float x = marginX + (i * (heartSize + padding));
+                
+                glTexCoord2f(0, 1); glVertex2f(x, startY);
+                glTexCoord2f(1, 1); glVertex2f(x + heartSize, startY);
+                glTexCoord2f(1, 0); glVertex2f(x + heartSize, startY - heartSize);
+                glTexCoord2f(0, 0); glVertex2f(x, startY - heartSize);
+            }
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        } 
+        // Fallback: Quadrados vermelhos se a textura falhar
+        else if (g_slingshotManager) {
+             int vidaAtual = g_slingshotManager->getHealth();
+             glColor3f(1.0f, 0.0f, 0.0f); // Vermelho
+             float heartSize = 40.0f;
+             float startY = HEIGHT - 10.0f;
+             glBegin(GL_QUADS);
+             for (int i = 0; i < vidaAtual; i++) {
+                float x = 20.0f + (i * 45.0f);
+                glVertex2f(x, startY);
+                glVertex2f(x + heartSize, startY);
+                glVertex2f(x + heartSize, startY - heartSize);
+                glVertex2f(x, startY - heartSize);
+            }
+            glEnd();
+        }
+
+        // --- DESLIGA O BLEND APÓS DESENHAR IMAGENS E BARRAS ---
+        glDisable(GL_BLEND);
+
+        // 3. TERCEIRO: Textos (O GLUT desenha bitmaps melhor sem Blend em alguns casos, ou com ele ligado.
+        // Se o texto ficar feio, reative o Blend aqui, mas geralmente para BitmapCharacter não precisa)
         char hudText[100];
         
-        // Cor do FPS (Verde/Amarelo/Vermelho)
         float fpsR = (fps < 30) ? 1.0f : ((fps < 55) ? 1.0f : 0.0f);
         float fpsG = (fps >= 30) ? 1.0f : 0.0f;
         
@@ -649,105 +701,36 @@ void drawHUD() {
         drawTextCentered(hudText, WIDTH / 2, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
 
         sprintf(hudText, "Tiros: %d", shotsRemaining);
-        drawTextCentered(hudText, 80, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
+        drawTextCentered(hudText, WIDTH / 2 + 150, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
         
-        // Instruções discretas no canto inferior
         glColor3f(1.0f, 1.0f, 1.0f);
         glRasterPos2f(10, 30);
         const char* help = "Q/E: Profundidade  |  Mouse: Mirar e Atirar";
         for (const char* c = help; *c != '\0'; c++) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
 
-    // --- TELA DE FIM DE JOGO (OVERLAY) ---
+    // --- TELA DE FIM DE JOGO ---
     if (gameOver || gameWon || gameLost) {
-        // 1. Fundo escuro em toda a tela (Dimming)
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-        glBegin(GL_QUADS);
-            glVertex2f(0, 0);
-            glVertex2f(WIDTH, 0);
-            glVertex2f(WIDTH, HEIGHT);
-            glVertex2f(0, HEIGHT);
-        glEnd();
-
-        // 2. Painel Central
-        float panelW = 400;
-        float panelH = 300;
-        float centerX = WIDTH / 2.0f;
-        float centerY = HEIGHT / 2.0f;
-        
-        // Fundo do Painel
-        glColor4f(0.2f, 0.2f, 0.2f, 0.9f); // Cinza escuro
-        glBegin(GL_QUADS);
-            glVertex2f(centerX - panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY + panelH/2);
-            glVertex2f(centerX - panelW/2, centerY + panelH/2);
-        glEnd();
-        
-        // Borda do Painel
-        glLineWidth(3.0f);
-        if (gameWon) {
-            glColor3f(0.2f, 0.8f, 0.2f);// Borda Verde se ganhou
-        } else {
-            glColor3f(0.8f, 0.2f, 0.2f);   
-        }// Borda Vermelha se perdeu
-            
-        
-        glBegin(GL_LINE_LOOP);
-            glVertex2f(centerX - panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY + panelH/2);
-            glVertex2f(centerX - panelW/2, centerY + panelH/2);
-        glEnd();
-
-        // 3. Textos
-        char title[50];
-        char scoreMsg[50];
-        
-        if (gameWon) sprintf(title, "VITORIA!");
-        else sprintf(title, "FIM DE JOGO");
-        
-        sprintf(scoreMsg, "Pontuacao Final: %d", score);
-
-        // Desenha Título
-        drawTextCentered(title, centerX, centerY + 80, GLUT_BITMAP_TIMES_ROMAN_24, 1.0f, 1.0f, 1.0f);
-        
-        // Desenha Pontuação
-        drawTextCentered(scoreMsg, centerX, centerY + 20, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 0.0f); // Amarelo
-
-        // 4. Botão "REINICIAR"
-        float btnW = 200;
-        float btnH = 50;
-        float btnY = centerY - 80; // Posição Y do centro do botão
-
-        // Cor do botão (Verde se ganhou, Laranja se perdeu)
-        if (gameWon) glColor3f(0.2f, 0.6f, 0.2f);
-        else glColor3f(0.8f, 0.4f, 0.0f);
-
-        glBegin(GL_QUADS);
-            glVertex2f(centerX - btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY + btnH/2);
-            glVertex2f(centerX - btnW/2, btnY + btnH/2);
-        glEnd();
-
-        // Borda do botão (para dar destaque)
-        glColor3f(1.0f, 1.0f, 1.0f);
-        glLineWidth(1.0f);
-        glBegin(GL_LINE_LOOP);
-            glVertex2f(centerX - btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY + btnH/2);
-            glVertex2f(centerX - btnW/2, btnY + btnH/2);
-        glEnd();
-
-        // Texto do Botão
-        drawTextCentered("REINICIAR", centerX, btnY - 5, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
-        
-        // Dica extra
-        drawTextCentered("(Ou pressione 'R')", centerX, centerY - 130, GLUT_BITMAP_HELVETICA_12, 0.7f, 0.7f, 0.7f);
+         glEnable(GL_BLEND); // Garante transparência para o fundo escuro
+         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+         glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
+         glBegin(GL_QUADS); glVertex2f(0, 0); glVertex2f(WIDTH, 0); glVertex2f(WIDTH, HEIGHT); glVertex2f(0, HEIGHT); glEnd();
+         
+         float panelW = 400; float panelH = 300; float centerX = WIDTH / 2.0f; float centerY = HEIGHT / 2.0f;
+         glColor4f(0.2f, 0.2f, 0.2f, 0.9f);
+         glBegin(GL_QUADS); glVertex2f(centerX - panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY + panelH/2); glVertex2f(centerX - panelW/2, centerY + panelH/2); glEnd();
+         
+         glLineWidth(3.0f); if (gameWon) glColor3f(0.2f, 0.8f, 0.2f); else glColor3f(0.8f, 0.2f, 0.2f);
+         glBegin(GL_LINE_LOOP); glVertex2f(centerX - panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY + panelH/2); glVertex2f(centerX - panelW/2, centerY + panelH/2); glEnd();
+         
+         char title[50]; char scoreMsg[50]; if (gameWon) sprintf(title, "VITORIA!"); else sprintf(title, "FIM DE JOGO"); sprintf(scoreMsg, "Pontuacao Final: %d", score);
+         drawTextCentered(title, centerX, centerY + 80, GLUT_BITMAP_TIMES_ROMAN_24, 1.0f, 1.0f, 1.0f); drawTextCentered(scoreMsg, centerX, centerY + 20, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 0.0f);
+         
+         float btnW = 200; float btnH = 50; float btnY = centerY - 80; if (gameWon) glColor3f(0.2f, 0.6f, 0.2f); else glColor3f(0.8f, 0.4f, 0.0f);
+         glBegin(GL_QUADS); glVertex2f(centerX - btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY + btnH/2); glVertex2f(centerX - btnW/2, btnY + btnH/2); glEnd();
+         
+         glColor3f(1.0f, 1.0f, 1.0f); glLineWidth(1.0f); glBegin(GL_LINE_LOOP); glVertex2f(centerX - btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY + btnH/2); glVertex2f(centerX - btnW/2, btnY + btnH/2); glEnd();
+         drawTextCentered("REINICIAR", centerX, btnY - 5, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f); drawTextCentered("(Ou pressione 'R')", centerX, centerY - 130, GLUT_BITMAP_HELVETICA_12, 0.7f, 0.7f, 0.7f);
     }
     
     glPopMatrix();
@@ -1533,6 +1516,12 @@ void init() {
     if (g_skyTextureID == 0) {
         printf("ERRO: Falha ao carregar a textura do ceu.\n");
     }
+
+    g_heartTextureID = loadGlobalTexture("Objetos/texturas/heart.png");
+    if (g_heartTextureID == 0) {
+        printf("AVISO: Textura do coracao nao encontrada em Objetos/coracao.png!\n");
+        // O jogo vai rodar, mas sem os corações.
+    }
     // 1. Inicializa a física
     initBullet();
     printf("DEBUG: initBullet concluido. dynamicsWorld = %p\n", dynamicsWorld);
@@ -1684,7 +1673,7 @@ void carregarJogo(int value) {
 int main(int argc, char** argv) {
     // 1. Inicialização Básica do GLUT (Janela)
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_STENCIL);
     glutInitWindowSize(WIDTH, HEIGHT);
     glutCreateWindow("Estilingue 3D - Angry C++ Birds"); // Mudei o título :)
     

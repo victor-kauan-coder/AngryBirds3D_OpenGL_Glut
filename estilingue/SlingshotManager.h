@@ -47,6 +47,7 @@ private:
     int damageCount;
     btRigidBody* slingshotBody; // Corpo físico do estilingue para colisões
     OBJModel* slingshotModel; // Modelo 3D do estilingue
+    GLuint crackTextureID;
 
     // --- Funções Internas (Privadas) ---
     void clearProjectile();
@@ -140,6 +141,8 @@ public:
      * @brief Aplica dano ao estilingue (chamado na colisão com porcos).
      */
     void takeDamage();
+
+    int getHealth() const;
 
     /**
      * @brief Retorna o corpo rígido do estilingue para verificação de colisão.
