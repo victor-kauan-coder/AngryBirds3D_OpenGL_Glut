@@ -73,6 +73,11 @@ OBJModel treeModel;
 bool treeModelLoaded = false;
 bool blockModelLoaded = false;
 
+bool animandoEntradaPassaro = false;
+float animEntradaTimer = 0.0f;
+btVector3 animStartPos;
+btVector3 animEndPos;
+
 //MENU
 GameMenu* g_menu = nullptr; // Ponteiro para o menu
 GameState g_currentState = STATE_MENU;
@@ -110,35 +115,49 @@ std::vector<Cannon*> canhoes;
 // --- Funções do Jogo ---
 
 void proximoPassaro() {
-    // Avança para o próximo pássaro na fila
     itPassaroAtual++;
     
-    // Verifica se ainda existem pássaros na fila
     if (itPassaroAtual != filaPassaros.end()) {
         passaroAtual = *itPassaroAtual;
         
-        // Reseta a posição do novo pássaro (por segurança)
-        passaroAtual->resetar(0, 0, 0);
-        
-        // Atualiza o gerenciador do estilingue com o novo pássaro
+        // --- 1. CONFIGURA O PULO DO PÁSSARO ATUAL ---
         if (g_slingshotManager) {
-            g_slingshotManager->setProjectile(passaroAtual);
+            animandoEntradaPassaro = true;
+            animEntradaTimer = 0.0f;
+            
+            animStartPos = passaroAtual->getPosFila();
+            float px, py, pz;
+            g_slingshotManager->getPouchPosition(px, py, pz);
+            animEndPos = btVector3(px, py, pz);
+            
+            // modificar para cada passaro
+            // g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO, 50);
         }
         
-        printf("Proximo passaro carregado: %s\n", passaroAtual->getTipo().c_str());
+        // --- 2. FAZ A FILA ANDAR (CORRIGIDO) ---
+        float gap = 1.8f; 
+        auto itFila = itPassaroAtual; 
+        itFila++; 
+        
+        for (; itFila != filaPassaros.end(); ++itFila) {
+            Passaro* p = *itFila;
+            if (p->isNaFila()) {
+                btVector3 posAntiga = p->getPosFila();
+                // Calcula o destino (um "gap" para a direita)
+                btVector3 novoDestino(posAntiga.x() + gap, posAntiga.y(), posAntiga.z());
+                
+                // Inicia a animação de caminhada/pulo da fila
+                p->caminharNaFilaPara(novoDestino);
+            }
+        }
+        
+        printf("Proximo passaro pulando e fila andando...\n");
     } else {
-        // Acabaram os pássaros
         passaroAtual = nullptr;
         if (g_slingshotManager) {
             g_slingshotManager->setProjectile(nullptr);
         }
         printf("Fim dos passaros!\n");
-        
-        // Se ainda houver alvos, é Game Over (Derrota)
-        // Se não houver alvos, a vitória já deve ter sido detectada em outro lugar
-        // if (!targetBodies.empty()) {
-        //     gameOver = true;
-        // }
     }
 }
 
@@ -743,109 +762,76 @@ void drawHUD() {
 void resetGame() {
     printf("--- INICIANDO RESET ---\n");
 
-    // 1. Desvincula o pássaro do estilingue
-    if (g_slingshotManager) {
-        g_slingshotManager->setProjectile(nullptr); 
-    }
+    // 1. Limpeza Geral
+    if (g_slingshotManager) g_slingshotManager->setProjectile(nullptr);
     passaroAtual = nullptr;
 
-    // 2. Limpa a fila de pássaros
-    for (auto* p : filaPassaros) {
-        if(p) {
-            p->limparFisica(); // Garante limpeza
-            delete p;
-        }
-    }
+    for (auto* p : filaPassaros) delete p;
     filaPassaros.clear();
 
-    // 3. Limpa Inimigos e Blocos (CORREÇÃO DO CRASH)
-    
-    // PORCOS
-    for (auto p : porcos) {
-        if(p) {
-            // Remove do mundo físico explicitamente antes de deletar
-            if (p->getRigidBody() && dynamicsWorld) {
-                dynamicsWorld->removeRigidBody(p->getRigidBody());
-            }
-            delete p; 
-        }
-    }
+    // Limpa inimigos
+    for (auto* p : porcos) { if(p) { if(p->getRigidBody() && dynamicsWorld) dynamicsWorld->removeRigidBody(p->getRigidBody()); delete p; } }
     porcos.clear();
-
-    // CANHÕES
-    for (auto c : canhoes) {
-        if(c) {
-            // Remove do mundo físico explicitamente antes de deletar
-            if (c->getRigidBody() && dynamicsWorld) {
-                dynamicsWorld->removeRigidBody(c->getRigidBody());
-            }
-            delete c; 
-        }
-    }
+    for (auto* c : canhoes) { if(c) { if(c->getRigidBody() && dynamicsWorld) dynamicsWorld->removeRigidBody(c->getRigidBody()); delete c; } }
     canhoes.clear();
-
-    // BLOCOS (A Causa principal do erro 127)
-    for (auto b : blocos) {
-        if (b) {
-            // O destrutor passa nullptr, então OBRIGATORIAMENTE temos que 
-            // chamar limparFisica passando o mundo ATUAL antes de deletar.
-            b->limparFisica(dynamicsWorld); 
-            delete b; 
-        }
-    }
+    for (auto* b : blocos) { if(b) { b->limparFisica(dynamicsWorld); delete b; } }
     blocos.clear();
-
-    // Limpa Pássaros Extras (Blue)
-    for (auto e : extraBirds) {
-        if(e) {
-            e->limparFisica();
-            delete e;
-        }
-    }
+    for (auto* e : extraBirds) { if(e) { e->limparFisica(); delete e; } }
     extraBirds.clear();
 
-    // 4. Deleta o Estilingue
-    if (g_slingshotManager) {
-        // O destrutor do Manager cuida de remover o corpo estático se o worldRef for válido
-        delete g_slingshotManager;
-        g_slingshotManager = nullptr;
-    }
+    if (g_slingshotManager) { delete g_slingshotManager; g_slingshotManager = nullptr; }
 
-    // 5. Destrói e Recria o Mundo Físico
-    // Agora é seguro chamar isso, pois a lista de objetos do Bullet deve estar vazia
-    // ou contendo apenas objetos que serão limpos seguramente.
+    // 2. Reinicia Física
     initBullet(); 
+    for (auto& bloco : blocos) bloco->carregarTexturas();
 
-    for (auto& bloco : blocos) {
-        bloco->carregarTexturas();
-    }
-
-    // 6. Reseta Variáveis
+    // 3. Reseta Variáveis
     score = 0;
     shotsRemaining = 8;
     gameOver = false;
     gameWon = false;
     gameLost = false;
+    animandoEntradaPassaro = false; // Importante resetar animação
 
-    // 7. Recria os Pássaros
-    for (int i = 0; i < 8; i+=3) {
-        filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
-        filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
+    // 4. RECRIA OS PÁSSAROS
+    for (int i = 0; i < 8; i++) {
+        Passaro* novoPassaro = nullptr;
+        int tipo = i % 4; 
+        if (tipo == 0) novoPassaro = new PassaroRed(0,0,0);
+        else if (tipo == 1) novoPassaro = new PassaroChuck(0,0,0);
+        else if (tipo == 2) novoPassaro = new PassaroBomb(0,0,0);
+        else novoPassaro = new PassaroBlue(0,0,0);
+        
+        filaPassaros.push_back(novoPassaro);
     }
-    
+
+    // 5. POSICIONA A FILA
+    float startX = -8.0f;  
+    float startZ = 16.0f;  
+    float gap = 1.8f;      
+    float alturaChao = 0.65f; 
+
+    for (int i = 0; i < filaPassaros.size(); i++) {
+        filaPassaros[i]->setNaFila(true, btVector3(startX - (i * gap), alturaChao, startZ));
+        filaPassaros[i]->setRotacaoVisual(0, 1, 0, M_PI / 2.0f); // Olhando para o cenário (M_PI / 2 para direita/fundo)
+    }
+
+    // 6. Prepara o Primeiro Pássaro (Correção do Som)
     itPassaroAtual = filaPassaros.begin();
     if (itPassaroAtual != filaPassaros.end()) {
         passaroAtual = *itPassaroAtual;
+        passaroAtual->setNaFila(false, btVector3(0,0,0)); 
+        
+        // Garante que o pássaro está ativo para o timer não chamar proximoPassaro()
+        passaroAtual->setAtivo(true);
+        passaroAtual->setEmVoo(false);
+        
+        passaroAtual->setRotacaoVisual(0, 1, 0, M_PI); // Rotação correta no estilingue
     }
 
-    // 8. Recria o Estilingue
+    // 7. Recria o Estilingue
     g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
-    
-    if (passaroAtual) {
-        g_slingshotManager->setProjectile(passaroAtual);
-    }
+    if (passaroAtual) g_slingshotManager->setProjectile(passaroAtual);
     
     g_audioManager.playMusic(MusicaTipo::JOGO);
     printf("--- RESET CONCLUIDO ---\n");
@@ -897,6 +883,7 @@ void mouse(int button, int state, int x, int y) {
             if (oldState != STATE_GAME && newState == STATE_GAME) {
                 g_audioManager.playPassaro(SomTipo::SAINDO_MENU, 100);
                 SDL_Delay(500);
+                g_audioManager.stopMusic();
                 g_audioManager.playMusic(MusicaTipo::JOGO);
 
             }
@@ -934,14 +921,16 @@ void keyboard(unsigned char key, int x, int y) {
     // --- 1. Lógica Global de Navegação (ESC) ---
     if (key == 27) { // Tecla ESC
         if (g_currentState == STATE_GAME) {
+            g_audioManager.playPassaro(SomTipo::ENTRANDO_MENU, 100);
+            g_audioManager.playMusic(MusicaTipo::MENU, 10);
             g_currentState = STATE_MENU; // Pausa o jogo e abre o menu
             return;
         } 
         else if (g_currentState == STATE_SETTINGS) {
             g_currentState = STATE_MENU; // Volta das configurações para o menu principal
-            g_audioManager.playPassaro(SomTipo::ENTRANDO_MENU, 100);
-            SDL_Delay(500);
-            g_audioManager.playMusic(MusicaTipo::MENU);
+            g_audioManager.playPassaro(SomTipo::SAINDO_MENU, 100);
+            g_audioManager.stopMusic();
+            g_audioManager.playMusic(MusicaTipo::JOGO, 10);
             return;
         } 
         else if (g_currentState == STATE_MENU) {
@@ -1052,14 +1041,25 @@ void display() {
     if (passaroAtual) {
         glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
         
-        if (passaroAtual->getRigidBody()) {
-            // Se tem corpo físico (voando ou sendo arrastado), usa a física
+        if (animandoEntradaPassaro) {
+            // Se está na animação de entrada, desenha onde o timer calculou
+            passaroAtual->desenharEmPosicao(passaroAtual->getX(), passaroAtual->getY(), passaroAtual->getZ());
+        }
+        else if (passaroAtual->getRigidBody()) {
             passaroAtual->desenhar(); 
-        } else if (g_slingshotManager) {
-            // Se não tem corpo físico (esperando no estilingue), desenha na posição da malha
+        } 
+        else if (g_slingshotManager) {
             float px, py, pz;
             g_slingshotManager->getPouchPosition(px, py, pz);
             passaroAtual->desenharEmPosicao(px, py, pz);
+        }
+    }
+
+    // --- DESENHO DA FILA (NOVO) ---
+    for (auto* p : filaPassaros) {
+        // Desenha apenas se estiver no modo "Fila" e não for o atual
+        if (p != passaroAtual && p->isNaFila()) {
+            p->desenharNaFila(); // Usa o método novo que considera o pulinho
         }
     }
 
@@ -1156,6 +1156,48 @@ void timer(int value) {
     // ============================================================
     // 1. ATUALIZAÇÃO DE LÓGICA DE JOGO (Sempre roda)
     // ============================================================
+
+    if (animandoEntradaPassaro && passaroAtual) {
+        animEntradaTimer += deltaTime * 1.5f; 
+        
+        if (animEntradaTimer >= 1.0f) {
+            // CHEGOU! 
+            animandoEntradaPassaro = false;
+            
+            passaroAtual->setNaFila(false, animEndPos); 
+            passaroAtual->resetar(animEndPos.x(), animEndPos.y(), animEndPos.z());
+            
+            // --- CORREÇÃO DE ROTAÇÃO ---
+            // Fixa a rotação olhando para os blocos (M_PI ou 180 graus).
+            // Sem spins, sem virar para trás.
+            passaroAtual->setRotacaoVisual(0, 1, 0, M_PI); 
+            
+            if (g_slingshotManager) g_slingshotManager->setProjectile(passaroAtual);
+            
+        } else {
+            // NO AR
+            float t = animEntradaTimer;
+            btVector3 currentPos = animStartPos.lerp(animEndPos, t);
+            float alturaPulo = sin(t * M_PI) * 5.0f;
+            currentPos.setY(currentPos.y() + alturaPulo);
+            
+            // --- CORREÇÃO DE ROTAÇÃO DURANTE O PULO ---
+            // Removemos o "t * M_PI * 4.0" (giro).
+            // Mantemos ele olhando para o alvo o tempo todo (M_PI).
+            // Se quiser que ele olhe para cima enquanto sobe, podemos ajustar,
+            // mas M_PI fixo resolve o problema dele olhar para trás.
+            passaroAtual->setRotacaoVisual(0, 1, 0, M_PI); 
+            
+            passaroAtual->setPosicao(currentPos.x(), currentPos.y(), currentPos.z());
+        }
+    }
+    
+    // --- ATUALIZA A FILA ---
+    for (auto* p : filaPassaros) {
+        if (p != passaroAtual && p->isNaFila()) {
+            p->atualizarFila(deltaTime);
+        }
+    }
 
     // Atualiza Blocos
     for (auto& bloco : blocos) {
@@ -1425,7 +1467,7 @@ void timer(int value) {
     if (g_currentState == STATE_GAME && !gameWon && !gameLost && verificarVitoria()) {
         gameWon = true;
         g_audioManager.stopMusic(); 
-        g_audioManager.playMusic(MusicaTipo::VITORIA);
+        g_audioManager.playMusic(MusicaTipo::VITORIA, 50);
         printf("VITORIA: Todos os inimigos eliminados!\n");
     }
 
@@ -1433,7 +1475,7 @@ void timer(int value) {
     if (g_currentState == STATE_GAME && !gameWon && !gameLost && passaroAtual == nullptr) {
         gameLost = true;
         g_audioManager.stopMusic();
-        g_audioManager.playMusic(MusicaTipo::DERROTA);
+        g_audioManager.playMusic(MusicaTipo::DERROTA, 50);
         printf("DERROTA: Acabaram os passaros!\n");
     }
     
@@ -1444,7 +1486,7 @@ void timer(int value) {
         
         g_audioManager.stopMusic();
         
-        g_audioManager.playMusic(MusicaTipo::DERROTA);
+        g_audioManager.playMusic(MusicaTipo::DERROTA, 50);
         
         printf("DERROTA: Estilingue destruido!\n");
     }
@@ -1572,55 +1614,70 @@ void carregarJogo(int value) {
     if (!jogoCarregado) {
         printf("=== INICIANDO CARREGAMENTO DOS RECURSOS ===\n");
         
+        for (auto* p : filaPassaros) delete p;
+        filaPassaros.clear();
 
-        // -------------------------------------------------------
-        // AQUI ESTAVA O PESO (Criação dos Pássaros = Carregar OBJ/MTL)
-        // -------------------------------------------------------
-        for (int i = 0; i < 8; i+=3) {
-            filaPassaros.push_back(new PassaroRed(0.0f, 0.0f, 0.0f));
-            filaPassaros.push_back(new PassaroChuck(0.0f, 0.0f, 0.0f));
-            filaPassaros.push_back(new PassaroBomb(0.0f, 0.0f, 0.0f));
-            filaPassaros.push_back(new PassaroBlue(0.0f, 0.0f, 0.0f));
+        for (int i = 0; i < 8; i++) {
+            Passaro* novoPassaro = nullptr;
+            int tipo = i % 4; 
+            if (tipo == 0) novoPassaro = new PassaroRed(0,0,0);
+            else if (tipo == 1) novoPassaro = new PassaroChuck(0,0,0);
+            else if (tipo == 2) novoPassaro = new PassaroBomb(0,0,0);
+            else novoPassaro = new PassaroBlue(0,0,0);
+            filaPassaros.push_back(novoPassaro);
         }
 
-        // Inicializa o iterador e o primeiro pássaro
+        float startX = -8.0f;  
+        float startZ = 16.0f;  
+        float gap = 1.8f;      
+        float alturaChao = 0.65f; 
+
+        for (int i = 0; i < filaPassaros.size(); i++) {
+            filaPassaros[i]->setNaFila(true, btVector3(startX - (i * gap), alturaChao, startZ));
+            
+            // --- CORREÇÃO DE ROTAÇÃO ---
+            // Mudei de M_PI/2 para -M_PI/2 (ou M_PI * 1.5). 
+            // Agora eles olham para a direita (para o estilingue).
+            filaPassaros[i]->setRotacaoVisual(0, 1, 0, -M_PI / 2.0f); 
+        }
+
+        // --- CORREÇÃO: ANIMAR O PRIMEIRO PÁSSARO ---
         itPassaroAtual = filaPassaros.begin();
         if (itPassaroAtual != filaPassaros.end()) {
             passaroAtual = *itPassaroAtual;
+            
+            // Configura a animação igualzinho ao proximoPassaro
+            animandoEntradaPassaro = true;
+            animEntradaTimer = 0.0f;
+            animStartPos = passaroAtual->getPosFila();
+            // Assumimos posição padrão do estilingue se o manager não estiver pronto, 
+            // ou ajustamos no primeiro frame. Vamos por uma posição fixa segura perto do centro.
+            animEndPos = btVector3(0.0f, 2.5f, 16.0f); 
+            
+            // Não tira da fila ainda!
         }
-        
-        // Inicializa Física, Texturas do jogo, etc.
+        // --- RESTANTE DA INICIALIZAÇÃO (MANTIDO IGUAL) ---
         init();
 
-        // Inicializa Áudio
         if (!g_audioManager.initAudio()) {
             printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
         }
 
-        // --- ADICIONE ISTO ---
-        // Começa tocando a música do MENU
+        g_audioManager.setVolume(10.0f); 
+        g_audioManager.playMusic(MusicaTipo::MENU, 50); 
         
-        g_audioManager.setVolume(10.0f);
-
-        g_audioManager.playMusic(MusicaTipo::MENU);
-        // Configura os callbacks de INTERAÇÃO (Mouse/Teclado)
-        // Só ativamos isso agora, para o jogador não clicar durante o loading
         glutMouseFunc(mouse);
         glutMotionFunc(mouseMotion);
         glutPassiveMotionFunc(passiveMouseMotion);
         glutKeyboardFunc(keyboard);
         glutSpecialFunc(specialKeys);
         
-        // Inicia o loop de física
         glutTimerFunc(0, timer, 0);
-
-        // --- FINALIZAÇÃO ---
-        jogoCarregado = true; // Libera o display para desenhar o jogo 3D
-        glutPostRedisplay();  // Força atualização da tela
+        jogoCarregado = true; 
+        glutPostRedisplay();  
         printf("=== CARREGAMENTO CONCLUIDO ===\n");
     }
 }
-
 
 int main(int argc, char** argv) {
     // 1. Inicialização Básica do GLUT (Janela)

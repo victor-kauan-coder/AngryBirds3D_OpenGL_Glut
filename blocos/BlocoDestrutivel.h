@@ -3,29 +3,18 @@
 #include <string>
 #include <map>
 #include <cmath>
-#include <cstdio> // Para printf
+#include <cstdio>
+#include <algorithm>
+#include <vector>
 #include <GL/glut.h>
 #include <btBulletDynamicsCommon.h>
 
-// Inclui o carregador de OBJ (de onde vem OBJModel) e o STB (para texturas)
-// Exatamente como em passaro.h
 #include "../util/loads.h"
 #include "ParticleManager.h"
 #include "../controle_audio/audio_manager.h"
 #include "../stb/stb_image.h"
 #include "../util/enums.h"
-// --- ENUMS para facilitar a configuração ---
 
-/**
- * @enum MaterialTipo
- * @brief Define as propriedades físicas e de jogo do bloco.
- */
-
-
-/**
- * @enum EstadoDano
- * @brief Controla o estado atual do bloco (saúde e textura).
- */
 enum class EstadoDano {
     INTEIRO,
     DANIFICADO,
@@ -36,15 +25,11 @@ enum class EstadoDano {
 extern ParticleManager g_particleManager;
 extern AudioManager g_audioManager;
 
-
-/**
- * @class BlocoDestrutivel
- * @brief Herda de OBJModel para carregar a malha e gerencia
- * a física, saúde e troca de texturas.
- */
 class BlocoDestrutivel : public OBJModel {
 private:
-    float escalaVisual;
+    // --- MUDANÇA 1: Escala separada por eixo ---
+    float scaleX, scaleY, scaleZ; 
+    
     bool estaAnimandoDano;
     float animDanoTimer;
     float animDanoDuracao;
@@ -52,7 +37,6 @@ private:
     float animDestruicaoTimer;
     float animDestruicaoDuracao;
     
-    // ... variáveis de jogo ...
     float saudeTotal;
     float saudeAtual;
     float corR, corG, corB;
@@ -60,7 +44,6 @@ private:
     EstadoDano estado;
     MaterialTipo tipoMaterial;
 
-    // ... física ...
     bool isContactActive;
     btRigidBody* corpoRigido;
     btVector3 dimensoes;
@@ -68,45 +51,31 @@ private:
     float atrito;
     float restituicao;
 
-    // ... texturas ...
     std::string texturaNomeInteiro;
     std::string texturaNomeDanificado;
     GLuint texturaIDInteiro = 0;
     GLuint texturaIDDanificado = 0;
 
-    // --- CACHE ESTÁTICO (A SOLUÇÃO DE PERFORMANCE) ---
-    // Isso guarda as texturas já carregadas na memória RAM
     static std::map<std::string, GLuint>& getTextureCache() {
         static std::map<std::string, GLuint> cache;
         return cache;
     }
 
     GLuint loadTexture(const char* filename) {
-        // 1. Verifica se já carregamos essa imagem antes
         std::string strFilename(filename);
         auto& cache = getTextureCache();
-        
-        if (cache.find(strFilename) != cache.end()) {
-            // Se já existe, retorna o ID imediatamente (Zero tempo de carregamento!)
-            return cache[strFilename];
-        }
+        if (cache.find(strFilename) != cache.end()) return cache[strFilename];
 
-        // 2. Se não existe, carrega do disco (Lento, mas só acontece 1 vez)
         int width, height, nrChannels;
         stbi_set_flip_vertically_on_load(true);
         unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
-        
-        if (!data) {
-            printf("Aviso: Nao foi possivel carregar a textura %s\n", filename);
-            return 0;
-        }
+        if (!data) return 0;
 
         GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
         GLuint textureID;
         glGenTextures(1, &textureID);
         glBindTexture(GL_TEXTURE_2D, textureID);
         
-        // Filtros para pixel art (nítido)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
@@ -114,277 +83,213 @@ private:
         
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         stbi_image_free(data);
-
-        // 3. Salva no cache para a próxima vez
         cache[strFilename] = textureID;
-        // printf("Textura carregada e cacheada: %s (ID: %d)\n", filename, textureID);
-        
         return textureID;
     }
 
+    static std::map<std::string, OBJModel*>& getModelCache() {
+        static std::map<std::string, OBJModel*> cache;
+        return cache;
+    }
+
+    void carregarModeloCacheado(const char* path) {
+        std::string key = path;
+        auto& cache = getModelCache();
+
+        if (cache.find(key) == cache.end()) {
+            OBJModel* novoModelo = new OBJModel();
+            if (novoModelo->loadFromFile(path)) {
+                cache[key] = novoModelo;
+            } else {
+                printf("ERRO FATAL: Nao foi possivel carregar modelo: %s\n", path);
+                delete novoModelo;
+                return;
+            }
+        }
+
+        OBJModel* cached = cache[key];
+        if (cached) {
+            this->vertices = cached->vertices;
+            this->normals = cached->normals;
+            this->texCoords = cached->texCoords;
+            this->meshes = cached->meshes;
+            this->materials = cached->materials;
+            this->displayListID = 0; 
+            this->needsUpdate = true;
+        }
+    }
+
 public:
-    /**
-     * @brief Construtor do Bloco.
-     * @param tipo O material (MADEIRA, PEDRA, GELO).
-     * @param modeloPath O caminho para o arquivo .obj (ex: "Objetos/bloco_barra.obj").
-     * @param w Largura total do bloco.
-     * @param h Altura total do bloco.
-     * @param d Profundidade total (comprimento) do bloco.
-     */
     BlocoDestrutivel(MaterialTipo tipo, const char* modeloPath, float w, float h, float d)
         : OBJModel(),
         corpoRigido(nullptr), estado(EstadoDano::INTEIRO), isContactActive(false),
-        estaAnimandoDano(false), animDanoTimer(0.0f), animDanoDuracao(0.3f), // 0.3 segundos de tremor
-        estaAnimandoDestruicao(false), animDestruicaoTimer(0.0f), animDestruicaoDuracao(0.5f) // 0.5 segundos encolhendo
+        estaAnimandoDano(false), animDanoTimer(0.0f), animDanoDuracao(0.3f),
+        estaAnimandoDestruicao(false), animDestruicaoTimer(0.0f), animDestruicaoDuracao(0.5f)
     {
-        // 1. Define as dimensões da FÍSICA (btBoxShape usa "meias-extensões")
         dimensoes = btVector3(w * 0.5f, h*0.5f, d * 0.5f);
-        
-        // 2. Define as propriedades com base no material
         tipoMaterial = tipo;
         std::string prefixoTextura;
 
         switch (tipoMaterial) {
             case MaterialTipo::GELO:
                 prefixoTextura = "gelo";
-                massa = 4.0f;
-                saudeTotal = 10.0f;
-                atrito = 0.1f;
-                restituicao = 0.2f;
-                pontuacaoValor = 150;
-                corR = 0.7f; corG = 0.8f; corB = 1.0f;
-                break;
+                massa = 4.0f; saudeTotal = 10.0f; atrito = 0.1f; restituicao = 0.2f; pontuacaoValor = 150;
+                corR = 0.7f; corG = 0.8f; corB = 1.0f; break;
             case MaterialTipo::PEDRA:
                 prefixoTextura = "pedra";
-                massa = 12.0f;
-                saudeTotal = 30.0f;
-                atrito = 5.0f;
-                restituicao = 0.05f;
-                pontuacaoValor = 300;
-                corR = 0.4f; corG = 0.4f; corB = 0.4f;
-                break;
+                massa = 12.0f; saudeTotal = 30.0f; atrito = 10.0f; restituicao = 0.05f; pontuacaoValor = 300;
+                corR = 0.4f; corG = 0.4f; corB = 0.4f; break;
             case MaterialTipo::MADEIRA:
             default:
                 prefixoTextura = "madeira";
-                massa = 8.0f;
-                saudeTotal = 10.0f;
-                atrito = 0.6f;
-                restituicao = 0.1f;
-                pontuacaoValor = 200;
-                corR = 0.6f; corG = 0.4f; corB = 0.2f;
-                break;
+                massa = 8.0f; saudeTotal = 10.0f; atrito = 0.6f; restituicao = 0.1f; pontuacaoValor = 200;
+                corR = 0.6f; corG = 0.4f; corB = 0.2f; break;
         }
         saudeAtual = saudeTotal;
 
-        // 3. Define os nomes das texturas com base no tipo e forma
-        // (Isso assume que seu modelo .obj é uma "barra")
-        // Ex: "texturas/madeira_barra.png"
-        // Ex: "texturas/madeira_barra_danificada.png"
-        std::string forma = "barra";
+        std::string forma = "barra"; 
         texturaNomeInteiro = "Objetos/texturas/" + prefixoTextura + "_" + forma + ".png";
         texturaNomeDanificado = "Objetos/texturas/" + prefixoTextura + "_" + forma + "_danificada.png";
 
-        // 4. Carrega o modelo .obj (ex: "Objetos/bloco_barra.obj")
-        // (O 'loads.h' vai normalizar o tamanho, mas vamos corrigir isso no 'desenhar')
-        if (!loadFromFile(modeloPath)) {
-            printf("ERRO: Falha ao carregar modelo de bloco: %s\n", modeloPath);
+        carregarModeloCacheado(modeloPath);
+
+        // --- MUDANÇA 2: Cálculo Robusto de Escala ---
+        // Calcula o tamanho real do modelo carregado (Bounding Box)
+        float minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+        
+        if (vertices.empty()) {
+            // Fallback se o modelo falhar: assume tamanho 1.0
+            scaleX = w; scaleY = h; scaleZ = d;
+        } else {
+            for (size_t i = 0; i < vertices.size(); i += 3) {
+                float vx = vertices[i];
+                float vy = vertices[i+1];
+                float vz = vertices[i+2];
+                if (vx < minX) minX = vx; if (vx > maxX) maxX = vx;
+                if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
+                if (vz < minZ) minZ = vz; if (vz > maxZ) maxZ = vz;
+            }
+            float modelW = maxX - minX;
+            float modelH = maxY - minY;
+            float modelD = maxZ - minZ;
+
+            // Evita divisão por zero
+            if (modelW < 0.001f) modelW = 1.0f;
+            if (modelH < 0.001f) modelH = 1.0f;
+            if (modelD < 0.001f) modelD = 1.0f;
+
+            // Define a escala para que o modelo preencha EXATAMENTE a caixa de física (w, h, d)
+            scaleX = w / modelW;
+            scaleY = h / modelH;
+            scaleZ = d / modelD;
         }
-        float maxDimOriginal = std::max({dimensoes.x()*2, dimensoes.y()*2, dimensoes.z()*2});
-        // Armazena para usar no draw()
-        escalaVisual = maxDimOriginal / 0.6f;
     }
 
     ~BlocoDestrutivel() {
         limparFisica(nullptr);
     }
 
-    void clearContactFlag() { 
-        isContactActive = false; 
-    }
-
-    /**
-     * @brief Retorna e define a flag de contato para TRUE, indicando o primeiro hit.
-     * @return true se era o primeiro contato, false se já estava ativo.
-     */
+    void clearContactFlag() { isContactActive = false; }
+    
     bool registerContact() {
-        if (isContactActive) {
-            return false;
-        }
+        if (isContactActive) return false;
         isContactActive = true;
         return true;
     }
 
     void update(float deltaTime) {
-        // 1. Atualiza a animação de "tremor"
         if (estaAnimandoDano) {
             animDanoTimer += deltaTime;
-            if (animDanoTimer >= animDanoDuracao) {
-                estaAnimandoDano = false;
-                animDanoTimer = 0.0f;
-            }
+            if (animDanoTimer >= animDanoDuracao) estaAnimandoDano = false;
         }
-
-        // 2. Atualiza a animação de "encolhimento"
         if (estaAnimandoDestruicao) {
             animDestruicaoTimer += deltaTime;
             if (animDestruicaoTimer >= animDestruicaoDuracao) {
                 estaAnimandoDestruicao = false;
-                estado = EstadoDano::DESTRUIDO; // <-- Só agora ele é marcado para limpeza
+                estado = EstadoDano::DESTRUIDO;
             }
         }
     }
 
-    /**
-     * @brief Carrega as texturas (Inteira e Danificada) para a GPU.
-     * Deve ser chamado DEPOIS que o modelo .obj foi carregado (no construtor).
-     */
     void carregarTexturas() {
         texturaIDInteiro = loadTexture(texturaNomeInteiro.c_str());
         texturaIDDanificado = loadTexture(texturaNomeDanificado.c_str());
-
-        // Define a textura inicial no material carregado pelo loads.h
         if (!meshes.empty() && texturaIDInteiro != 0) {
             meshes[0].material.textureID = texturaIDInteiro;
-        } else {
-             printf("Aviso: Bloco nao tem malhas (meshes) ou textura inteira falhou.\n");
         }
     }
 
-    /**
-     * @brief Cria o corpo rígido (btRigidBody) e o adiciona ao mundo.
-     * (Adaptado de passaro.h)
-     */
     void inicializarFisica(btDiscreteDynamicsWorld* mundoFisica, const btVector3& position, const btQuaternion& rotation = btQuaternion(0, 0, 0, 1)) {
-        if (corpoRigido) {
-            limparFisica(mundoFisica);
-        }
-
-        // 1. Cria a forma de colisão (uma caixa com as dimensões corretas)
+        if (corpoRigido) limparFisica(mundoFisica);
         btCollisionShape* blockShape = new btBoxShape(dimensoes);
-        
-        btTransform startTransform;
-        startTransform.setIdentity();
-        startTransform.setOrigin(position);
-        startTransform.setRotation(rotation);
-        
-        btVector3 localInertia(100, 100, 100);
-        if (massa != 0.f)
-            blockShape->calculateLocalInertia(massa, localInertia);
-
+        btTransform startTransform; startTransform.setIdentity(); startTransform.setOrigin(position); startTransform.setRotation(rotation);
+        btVector3 localInertia(0, 0, 0);
+        if (massa != 0.f) blockShape->calculateLocalInertia(massa, localInertia);
         btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
         btRigidBody::btRigidBodyConstructionInfo rbInfo(massa, myMotionState, blockShape, localInertia);
-        
         corpoRigido = new btRigidBody(rbInfo);
         corpoRigido->setFriction(atrito);
         corpoRigido->setRestitution(restituicao);
-        corpoRigido->setDamping(0.3f, 0.3f); // Adiciona "peso" ao movimento
-
-        // Ativa o CCD para evitar tunelamento (como fizemos no estilingue.cpp)
-        corpoRigido->setCcdMotionThreshold(dimensoes.x()); // Usa a menor dimensão
-
+        corpoRigido->setDamping(0.3f, 0.3f);
+        corpoRigido->setCcdMotionThreshold(dimensoes.x());
         corpoRigido->setCcdSweptSphereRadius(dimensoes.x());
-
         mundoFisica->addRigidBody(corpoRigido);
     }
 
-    /**
-     * @brief Remove o corpo rígido do mundo.
-     * (Adaptado de passaro.h)
-     */
     void limparFisica(btDiscreteDynamicsWorld* mundoFisica) {
         if (corpoRigido) {
-            if (mundoFisica) {
-                mundoFisica->removeRigidBody(corpoRigido);
-            }
+            if (mundoFisica) mundoFisica->removeRigidBody(corpoRigido);
             delete corpoRigido->getMotionState();
-            // NÃO delete o collision shape se ele for compartilhado
-            // (mas aqui estamos criando um novo, então podemos deletar)
             delete corpoRigido->getCollisionShape();
             delete corpoRigido;
             corpoRigido = nullptr;
         }
     }
 
-    /**
-     * @brief Aplica dano ao bloco.
-     * Esta função deve ser chamada pelo loop principal do jogo
-     * ao detectar uma colisão.
-     */
-void aplicarDano(float dano) {
+    void aplicarDano(float dano) {
         if (estado == EstadoDano::MORRENDO || estado == EstadoDano::DESTRUIDO) return;
-
         saudeAtual -= dano;
         if(dano >= 0.5f) g_audioManager.playColisao(tipoMaterial, 30);
-        // --- Lógica de Troca de Textura (Dano) ---
+        
         if (saudeAtual <= saudeTotal * 0.5f && estado == EstadoDano::INTEIRO) {
-            // printf("Bloco danificado!\n");
             estado = EstadoDano::DANIFICADO;
             if (!meshes.empty() && texturaIDDanificado != 0) {
                 meshes[0].material.textureID = texturaIDDanificado;
-                invalidateDisplayList();
+                invalidateDisplayList(); 
             }
-            
         }
-
-        // --- ADICIONADO: Inicia a animação de tremor ---
-        estaAnimandoDano = true;
-        animDanoTimer = 0.0f;
-
-        // --- Lógica de Destruição ---
+        estaAnimandoDano = true; animDanoTimer = 0.0f;
         if (saudeAtual <= 0) {
             printf("Bloco destruido! +%d pontos!\n", pontuacaoValor);
-            estado = EstadoDano::MORRENDO; // <-- MUDADO (Inicia a animação)
-            estaAnimandoDestruicao = true; // <-- ADICIONADO
-            animDestruicaoTimer = 0.0f;    // <-- ADICIONADO
-            btVector3 pos = corpoRigido->getCenterOfMassPosition();
-            // Cria a explosão de partículas com a cor do material
-            g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
-            g_audioManager.playDestruction(tipoMaterial);
-            // Não limpe a física aqui, a animação precisa tocar primeiro!
+            estado = EstadoDano::MORRENDO; estaAnimandoDestruicao = true; animDestruicaoTimer = 0.0f;
+            if (corpoRigido) {
+                btVector3 pos = corpoRigido->getCenterOfMassPosition();
+                g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
+                g_audioManager.playDestruction(tipoMaterial);
+            }
         }
     }
-
-    /**
-     * @brief Desenha o bloco (Override de OBJModel::draw).
-     * (Adaptado de passaro.h)
-     */
-    // Em BlocoDestrutivel.h
 
     void desenhar() {
         if (estado == EstadoDano::DESTRUIDO) return; 
         if (!corpoRigido) return;
-
-        btTransform trans;
-        corpoRigido->getMotionState()->getWorldTransform(trans);
-        btScalar m[16];
-        trans.getOpenGLMatrix(m);
-        
+        btTransform trans; corpoRigido->getMotionState()->getWorldTransform(trans);
+        btScalar m[16]; trans.getOpenGLMatrix(m);
         glPushMatrix();
         glMultMatrixf(m);
-
-        if (estaAnimandoDano) {
-            float shakeOffset = sin(animDanoTimer * 100.0f) * 0.05f; 
-            glTranslatef(shakeOffset, 0, 0);
-        }
-
-        if (estaAnimandoDestruicao) {
-            float t = (animDestruicaoTimer / animDestruicaoDuracao);
-            float escala = 1.0f - t; 
-            glScalef(escala, escala, escala);
-        }
-
-        // Usa a escala pré-calculada (muito mais rápido)
-        glScalef(escalaVisual, escalaVisual, escalaVisual);
-
-        OBJModel::draw(); // Agora chama a versão SUPER RÁPIDA com Display Lists
+        if (estaAnimandoDano) glTranslatef(sin(animDanoTimer * 100.0f) * 0.05f, 0, 0);
+        if (estaAnimandoDestruicao) { float t = (animDestruicaoTimer / animDestruicaoDuracao); float s = 1.0f - t; glScalef(s, s, s); }
+        
+        // --- MUDANÇA 3: Aplica a escala não-uniforme ---
+        // Isso garante que o modelo (independente de ser cubo, barra ou placa)
+        // seja esticado para preencher exatamente a caixa de colisão física.
+        glScalef(scaleX, scaleY, scaleZ);
+        
+        OBJModel::draw();
         glPopMatrix();
     }
 
-    MaterialTipo getTipo(){
-        return this->tipoMaterial;
-    }
-
-    // --- Getters Úteis ---
+    MaterialTipo getTipo(){ return this->tipoMaterial; }
     btRigidBody* getRigidBody() { return corpoRigido; }
     bool isDestruido() const { return estado == EstadoDano::DESTRUIDO; }
     int getPontuacao() const { return pontuacaoValor; }

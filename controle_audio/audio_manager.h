@@ -114,7 +114,7 @@ public:
 
     void setVolume(float volumePercent);
 
-    void playMusic(MusicaTipo tipo); // Toca a música (loop infinito)
+    void playMusic(MusicaTipo tipo, int volume=10); // Toca a música (loop infinito)
 
     void stopMusic();
 

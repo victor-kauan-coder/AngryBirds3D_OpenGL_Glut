@@ -82,7 +82,7 @@ bool AudioManager::initAudio() {
     return false;
 }
 
-void AudioManager::playMusic(MusicaTipo tipo) {
+void AudioManager::playMusic(MusicaTipo tipo, int volume) {
     Mix_Music* targetMusic = nullptr;
     switch (tipo) {
             case MusicaTipo::MENU:
@@ -104,6 +104,11 @@ void AudioManager::playMusic(MusicaTipo tipo) {
     if (targetMusic) {
         // Toca a música em loop (-1)
         // O SDL_mixer troca automaticamente (para a anterior e inicia a nova)
+        if (volume < 0) volume = 0;
+        if (volume > 100) volume = 100;
+        
+        int sdlVolume = (volume * MIX_MAX_VOLUME) / 100;
+        Mix_VolumeMusic(sdlVolume);
         if (Mix_PlayMusic(targetMusic, -1) == -1) {
             printf("Erro ao tocar musica: %s\n", Mix_GetError());
         } else {
