@@ -60,19 +60,18 @@ struct OBJModel {
     std::map<std::string, Material> materials;
     std::vector<Mesh> meshes;
 
-    // --- NOVO: Display List ID ---
+
     GLuint displayListID = 0;
     bool needsUpdate = true;
-    // -----------------------------
 
-    // (Destrutor para limpar a memória da GPU)
+    //destrutor 
     ~OBJModel() {
         if (displayListID != 0) {
             glDeleteLists(displayListID, 1);
         }
     }
 
-    // Função auxiliar para forçar atualização (usada quando o bloco quebra)
+    //usada para quando o bloco quebra e precisa atualizar a textura
     void invalidateDisplayList() {
         needsUpdate = true;
     }
@@ -80,12 +79,12 @@ struct OBJModel {
     GLuint loadTexture(const char* filename) {
         int width, height, nrChannels;
         
-        // 1. Tenta carregar normal
+        //tentando carregar 
         stbi_set_flip_vertically_on_load(true); 
         unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
         
         if (!data) {
-            // Se falhar, avisa (opcional) e retorna 0
+            //caso falhe
             return 0; 
         }
 
@@ -96,8 +95,7 @@ struct OBJModel {
         glGenTextures(1, &textureID); 
         glBindTexture(GL_TEXTURE_2D, textureID); 
 
-        // 2. CONFIGURAÇÃO PIXEL-PERFECT (Para Canhão e Blocos ficarem nítidos)
-        // GL_NEAREST = Mantém os pixels quadrados (estilo Minecraft/Retro)
+        // GL_NEAREST = Mantém os pixels pixelados
         // GL_CLAMP_TO_EDGE = Impede bordas misturadas
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -117,7 +115,7 @@ struct OBJModel {
         Material currentMat; 
         std::string currentMatName;
         std::string line;
-        
+        // le linha por linha do arquivo mtl
         while (std::getline(file, line)) {
             std::istringstream iss(line);
             std::string prefix;
@@ -268,21 +266,19 @@ struct OBJModel {
             vertices[i+2] = (vertices[i+2] - centerZ) * normalizeScale;
         }
         
-        needsUpdate = true; // Marca para compilar a lista na primeira vez
+        needsUpdate = true; 
         return true;
     }
 
-    // --- DESENHAR OTIMIZADO ---
+    //desenhar
     void draw() {
         if (meshes.empty() || vertices.empty()) return;
 
-        // Se a lista não existe ou precisa atualizar (ex: textura mudou)
+        //se esta desenhando pela primeira vez ou um bloco precisa mudar de textura
         if (displayListID == 0 || needsUpdate) {
             if (displayListID == 0) displayListID = glGenLists(1);
             
-            glNewList(displayListID, GL_COMPILE); // COMEÇA A GRAVAÇÃO
-            
-            // --- CÓDIGO DE DESENHO ORIGINAL (Agora roda só 1 vez) ---
+            glNewList(displayListID, GL_COMPILE); 
             bool has_real_materials = !materials.empty();
             if (has_real_materials) glDisable(GL_COLOR_MATERIAL);
 
@@ -309,13 +305,10 @@ struct OBJModel {
             if (!texCoords.empty()) glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
             if (has_real_materials) glEnable(GL_COLOR_MATERIAL);
-            // --------------------------------------------------------
 
-            glEndList(); // FIM DA GRAVAÇÃO
+            glEndList(); 
             needsUpdate = false;
         }
-
-        // Apenas chama a lista gravada (MUITO RÁPIDO)
         glCallList(displayListID);
     }
 };

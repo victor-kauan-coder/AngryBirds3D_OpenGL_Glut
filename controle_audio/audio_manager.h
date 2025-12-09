@@ -5,20 +5,12 @@
 #include <cstdio>
 #include "../util/enums.h"
 
-// --- Configurações de Compilação/Inclusões SDL ---
-// Nota: Em um projeto real, você usaria includes do SDL aqui,
-// mas para manter a compilação cruzada mais limpa, usaremos apenas a declaração
-// adianate, assumindo que a implementação no .cpp cuida dos includes do SDL.
-
-// Forward Declaration para o tipo SDL_mixer
 struct Mix_Chunk; 
 struct Mix_Music;
 
-// A extensão de áudio mais recomendada para portabilidade é OGG/WAV.
+//extensao dos efeitos sonoros
 #define AUDIO_EXTENSION ".wav" 
-#define MIX_MAX_VOLUME 128 // Volume máximo padrão do SDL_mixer
-
-
+#define MIX_MAX_VOLUME 128 //volume máximo padrão do SDL_mixer
 
 /**
  * @class AudioManager
@@ -32,7 +24,7 @@ private:
 
     float masterVolumePercent = 100.0f;
     
-    // --- NOVO: Variáveis para Música ---
+    //musicas presentes no jogo
     Mix_Music* musicaMenu = nullptr;
     Mix_Music* musicaJogo = nullptr;
     Mix_Music* somDerrota = nullptr;
@@ -40,15 +32,13 @@ private:
     MusicaTipo musicaAtual;
     bool musicaEstaTocando = false;
 
-    // Funções auxiliares
     bool loadSound(SomTipo type, const std::string& path);
-    // ----------------------------------
+
     
 public:
-    // Construtor vazio (a inicialização ocorre em initAudio)
+
     AudioManager() {}
 
-    // --- Gerenciamento do Ciclo de Vida ---
     /**
      * @brief Inicializa o SDL_mixer e carrega todos os sons.
      * Deve ser chamada uma única vez no início do jogo.
@@ -90,6 +80,7 @@ public:
                 break;
         }
     }
+
     void playSlingshot(bool puxando,int volume=100) {
         SomTipo som = puxando ? SomTipo::ESTILINGUE_PUXANDO : SomTipo::ESTILINGUE_SOLTANDO;
         play(som,volume);
@@ -116,7 +107,7 @@ public:
 
     void setVolume(float volumePercent);
 
-    void playMusic(MusicaTipo tipo, int volume=10); // Toca a música (loop infinito)
+    void playMusic(MusicaTipo tipo, int volume=10); //toca a música (loop infinito)
 
     void stopMusic();
 

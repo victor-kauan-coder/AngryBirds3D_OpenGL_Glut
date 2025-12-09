@@ -2,8 +2,6 @@
 #include <cstdio>
 #include <cmath>
 
-// Ajuste o caminho conforme sua pasta. 
-// Se "stb" está na raiz e este arquivo em "Menu", usamos "../stb/"
 #include "../stb/stb_image.h" 
 
 extern AudioManager g_audioManager;
@@ -15,12 +13,11 @@ GameMenu::GameMenu(int width, int height) {
     volSlider.value = 0.35f; 
     volSlider.isDragging = false;
 
-    // --- CARREGAR A IMAGEM AQUI ---
-    // Certifique-se de criar essa imagem na pasta correta!
+    //imagem da tela de menu
     bgTextureID = loadTexture("Objetos/texturas/menu_background.png");
 }
 
-// --- Nova Função de Carregamento ---
+
 GLuint GameMenu::loadTexture(const char* filename) {
     int width, height, nrChannels;
     unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
@@ -34,13 +31,14 @@ GLuint GameMenu::loadTexture(const char* filename) {
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    // Configurações de filtro (para a imagem não ficar pixelada ao esticar)
+    //configurações de filtro (para a imagem não ficar pixelada ao esticar)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+    //envia os pixels da memória RAM para a memória de vídeo (VRAM)
     glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-
+    //libera da ram
     stbi_image_free(data);
     return textureID;
 }
@@ -55,7 +53,6 @@ void GameMenu::updateDimensions(int width, int height) {
     float btnH = 50.0f;
     float spacing = 70.0f;
 
-    // Ajustei um pouco a posição para baixo, assumindo que a imagem de fundo tenha um logo em cima
     float startY = cy - 50.0f; 
 
     btnPlay = {cx - btnW/2, startY + spacing, btnW, btnH, "JOGAR", false};
@@ -73,7 +70,7 @@ void GameMenu::drawText(float x, float y, std::string text, void* font) {
     }
 }
 
-// Mantendo o botão quadrado (sem arredondamento)
+
 void GameMenu::drawButton(Button& btn) {
     if (btn.isHovered) glColor3f(0.3f, 0.7f, 0.3f); 
     else glColor3f(0.2f, 0.5f, 0.2f); 
@@ -85,8 +82,8 @@ void GameMenu::drawButton(Button& btn) {
         glVertex2f(btn.x, btn.y + btn.h);
     glEnd();
 
-    // Borda simples
-    glColor3f(1.0f, 1.0f, 1.0f);
+    // Borda 
+    glColor3f(1.0f, 1.0f, 1.0f); //borada branca
     glLineWidth(2.0f);
     glBegin(GL_LINE_LOOP);
         glVertex2f(btn.x, btn.y);
@@ -102,7 +99,7 @@ void GameMenu::drawButton(Button& btn) {
 }
 
 void GameMenu::drawSlider() {
-    glColor3f(0.8f, 0.8f, 0.8f); // Fundo do slider mais claro para contrastar com imagem
+    glColor3f(0.8f, 0.8f, 0.8f);
     glBegin(GL_QUADS);
         glVertex2f(volSlider.x, volSlider.y - 2);
         glVertex2f(volSlider.x + volSlider.w, volSlider.y - 2);
@@ -130,7 +127,6 @@ void GameMenu::drawSlider() {
         glVertex2f(kx - ks, ky + ks);
     glEnd();
 
-    // Texto com fundo preto pequeno para leitura
     char volStr[32];
     sprintf(volStr, "Volume: %d%%", (int)(volSlider.value * 100));
     glColor3f(1.0f, 1.0f, 1.0f);
@@ -138,35 +134,37 @@ void GameMenu::drawSlider() {
 }
 
 void GameMenu::draw(GameState currentState) {
+    // desliga luz e profundidade para desenhar o menu 2d sem interferencia
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     
+    // configura a projecao para 2d
     glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
+    glPushMatrix(); // salva a camera do jogo
     glLoadIdentity();
-    gluOrtho2D(0, screenWidth, 0, screenHeight);
+    gluOrtho2D(0, screenWidth, 0, screenHeight); // define coordenadas da tela
     
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
 
-    // --- DESENHAR IMAGEM DE FUNDO ---
     if (bgTextureID != 0) {
+        // desenha a imagem de fundo se tiver textura carregada
         glEnable(GL_TEXTURE_2D);
         glBindTexture(GL_TEXTURE_2D, bgTextureID);
-        glColor3f(1.0f, 1.0f, 1.0f); // Branco para manter cores originais
+        glColor3f(1.0f, 1.0f, 1.0f);
 
         glBegin(GL_QUADS);
-            // Mapeia a textura inteira para a tela inteira
-            glTexCoord2f(0, 1); glVertex2f(0, 0);             // Inferior Esq (Note a inversão Y se necessário)
-            glTexCoord2f(1, 1); glVertex2f(screenWidth, 0);   // Inferior Dir
-            glTexCoord2f(1, 0); glVertex2f(screenWidth, screenHeight); // Superior Dir
-            glTexCoord2f(0, 0); glVertex2f(0, screenHeight);  // Superior Esq
+            // mapeia a textura na tela toda
+            glTexCoord2f(0, 1); glVertex2f(0, 0);            
+            glTexCoord2f(1, 1); glVertex2f(screenWidth, 0);  
+            glTexCoord2f(1, 0); glVertex2f(screenWidth, screenHeight); 
+            glTexCoord2f(0, 0); glVertex2f(0, screenHeight); 
         glEnd();
 
         glDisable(GL_TEXTURE_2D);
     } else {
-        // Fallback: Se não carregou a imagem, pinta de cinza escuro
+        // pinta um fundo cinza caso a imagem falhe
         glColor3f(0.1f, 0.1f, 0.1f);
         glBegin(GL_QUADS);
             glVertex2f(0, 0);
@@ -176,24 +174,21 @@ void GameMenu::draw(GameState currentState) {
         glEnd();
     }
 
-    // --- Desenha os Botões ---
     if (currentState == STATE_MENU) {
-        // Título (opcional, se a imagem já tiver logo, remova isso)
-        // glColor3f(1.0f, 0.8f, 0.0f);
-        // drawText(screenWidth/2 - 80, screenHeight - 150, "ESTILINGUE 3D", GLUT_BITMAP_TIMES_ROMAN_24);
-        
+        // desenha os botoes do menu principal
         drawButton(btnPlay);
         drawButton(btnSettings);
         drawButton(btnExit);
     } 
     else if (currentState == STATE_SETTINGS) {
+        // desenha a tela de configuracoes e slider
         glColor3f(1.0f, 1.0f, 1.0f);
         drawText(screenWidth/2 - 60, screenHeight - 100, "CONFIGURACOES", GLUT_BITMAP_TIMES_ROMAN_24);
-        
         drawSlider();
         drawButton(btnBack);
     }
 
+    // restaura a camera 3d do jogo e liga a profundidade de volta
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
@@ -201,32 +196,37 @@ void GameMenu::draw(GameState currentState) {
     glEnable(GL_DEPTH_TEST);
 }
 
-// ... (Mantenha as funções isMouseOver, handleMouseClick e handleMouseMotion iguais) ...
 bool GameMenu::isMouseOver(float mx, float my, Button& btn) {
+    // inverte o y porque o opengl e diferente do windows
     float glY = screenHeight - my;
+    // verifica se o mouse ta dentro do retangulo do botao
     return (mx >= btn.x && mx <= btn.x + btn.w && 
             glY >= btn.y && glY <= btn.y + btn.h);
 }
 
 GameState GameMenu::handleMouseClick(int button, int state, int x, int y, GameState currentState) {
+    // se soltar o botao, para de arrastar o volume
     if (state != GLUT_DOWN) {
         volSlider.isDragging = false;
         return currentState;
     }
 
     if (currentState == STATE_MENU) {
+        // verifica cliques nos botoes do menu principal e troca estado
         if (isMouseOver(x, y, btnPlay)) return STATE_GAME;
         if (isMouseOver(x, y, btnSettings)) return STATE_SETTINGS;
         if (isMouseOver(x, y, btnExit)) return STATE_EXIT;
     }
     else if (currentState == STATE_SETTINGS) {
+        // botao de voltar pro menu
         if (isMouseOver(x, y, btnBack)) return STATE_MENU;
         
         float glY = screenHeight - y;
+        // verifica se clicou na barra de volume
         if (x >= volSlider.x && x <= volSlider.x + volSlider.w &&
             glY >= volSlider.y - 10 && glY <= volSlider.y + volSlider.h + 10) {
             volSlider.isDragging = true;
-            handleMouseMotion(x, y, currentState);
+            handleMouseMotion(x, y, currentState); // ja atualiza o volume na hora do clique
         }
     }
     return currentState;
@@ -234,6 +234,7 @@ GameState GameMenu::handleMouseClick(int button, int state, int x, int y, GameSt
 
 void GameMenu::handleMouseMotion(int x, int y, GameState currentState) {
     if (currentState == STATE_MENU) {
+        // atualiza o efeito de mouse em cima dos botoes (hover)
         btnPlay.isHovered = isMouseOver(x, y, btnPlay);
         btnSettings.isHovered = isMouseOver(x, y, btnSettings);
         btnExit.isHovered = isMouseOver(x, y, btnExit);
@@ -241,11 +242,14 @@ void GameMenu::handleMouseMotion(int x, int y, GameState currentState) {
         btnBack.isHovered = isMouseOver(x, y, btnBack);
 
         if (volSlider.isDragging) {
+            // calcula a porcentagem do slider baseado na posicao do mouse
             float val = (x - volSlider.x) / volSlider.w;
+            // limita o valor entre 0 e 1
             if (val < 0.0f) val = 0.0f;
             if (val > 1.0f) val = 1.0f;
             volSlider.value = val;
             
+            // atualiza o volume real do jogo
             g_audioManager.setVolume(val * 100.0f); 
         }
     }

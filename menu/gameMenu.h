@@ -6,20 +6,14 @@
 #include "../controle_audio/audio_manager.h"
 
 // Estados possíveis do jogo
-enum GameState {
-    STATE_MENU,
-    STATE_SETTINGS,
-    STATE_GAME,
-    STATE_EXIT
-};
-
+#include "../util/enums.h"
 class GameMenu {
 private:
     int screenWidth;
     int screenHeight;
     float currentVolume;
     
-    // --- NOVO: Variável para a textura do fundo ---
+    //variavel para a textura do fundo
     GLuint bgTextureID; 
 
     struct Button {
@@ -39,7 +33,7 @@ private:
         bool isDragging;
     } volSlider;
 
-    // Função auxiliar interna para carregar a imagem
+    //função auxiliar interna para carregar a imagem
     GLuint loadTexture(const char* filename);
 
     void drawButton(Button& btn);

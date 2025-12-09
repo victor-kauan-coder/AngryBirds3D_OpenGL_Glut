@@ -1,7 +1,5 @@
 #pragma once
 
-// --- Tipos de Materiais de Blocos ---
-
 /**
  * @enum MaterialTipo
  * @brief Define os tipos de materiais para blocos e para o sistema de áudio/jogo.
@@ -57,4 +55,11 @@ enum class SomTipo {
     RED_SELECIONADO,
     BLUE_SELECIONADO,
     BOMB_SELECIONADO
+};
+
+enum GameState {
+    STATE_MENU,
+    STATE_SETTINGS,
+    STATE_GAME,
+    STATE_EXIT
 };
