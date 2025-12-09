@@ -11,6 +11,14 @@ enum class MaterialTipo {
 };
 
 
+enum class EstadoDano {
+    INTEIRO,
+    DANIFICADO,
+    MORRENDO,
+    DESTRUIDO
+};
+
+
 enum class MusicaTipo {
     MENU,
     JOGO,
