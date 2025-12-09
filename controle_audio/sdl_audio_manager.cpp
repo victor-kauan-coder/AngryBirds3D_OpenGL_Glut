@@ -72,7 +72,11 @@ bool AudioManager::initAudio() {
         loadSound(SomTipo::PORCO, "song/porco_inicio" AUDIO_EXTENSION)&&
         loadSound(SomTipo::ENTRANDO_MENU, "song/menu confirm" AUDIO_EXTENSION)&&
         loadSound(SomTipo::SAINDO_MENU, "song/menu back" AUDIO_EXTENSION)&&
-        loadSound(SomTipo::PORCO_PULANDO, "song/porco_pulo" AUDIO_EXTENSION)) 
+        loadSound(SomTipo::PORCO_PULANDO, "song/porco_pulo" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::RED_SELECIONADO, "song/red_selecionado" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::CHUCK_SELECIONADO, "song/chuck_selecionado" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::BLUE_SELECIONADO, "song/blue_selecionado" AUDIO_EXTENSION)&&
+        loadSound(SomTipo::BOMB_SELECIONADO, "song/bomb_selecionado" AUDIO_EXTENSION)) 
     {
         printf("Audio carregado com sucesso.\n");
         return true;
@@ -82,32 +86,95 @@ bool AudioManager::initAudio() {
     return false;
 }
 
+void AudioManager::setVolume(float volumePercent) {
+    if (volumePercent < 0) volumePercent = 0;
+    if (volumePercent > 100) volumePercent = 100;
+    
+    // 1. Salva o valor global para usar nos efeitos sonoros depois
+    masterVolumePercent = volumePercent;
+
+    // 2. Calcula volume SDL (0 a 128)
+    int vol = (int)((volumePercent / 100.0f) * MIX_MAX_VOLUME);
+
+    // 3. Define volume dos canais (Master)
+    Mix_Volume(-1, vol);      
+
+    // 4. Define volume da música imediatamente
+    // (Música geralmente é mais baixa, mantive sua divisão por 1.5)
+    if (musicaEstaTocando) {
+         Mix_VolumeMusic(vol / 1.5);
+    }
+}
+
+void AudioManager::play(SomTipo type, int volume) {
+    auto it = soundChunks.find(type);
+    if (it != soundChunks.end()) {
+        Mix_Chunk* chunk = it->second;
+
+        // --- CORREÇÃO AQUI: MATEMÁTICA DO VOLUME ---
+        
+        // 1. Calcula o fator global (ex: 0.5 se o slider estiver no meio)
+        float fatorGlobal = masterVolumePercent / 100.0f;
+        
+        // 2. Aplica o fator ao volume solicitado pelo jogo
+        // Ex: Se o jogo pede 30 (colisão) e o Menu está em 0% (0.0): 30 * 0.0 = 0.
+        int volumeFinal = (int)(volume * fatorGlobal);
+
+        // 3. Converte para escala SDL (0-128)
+        int sdlVolume = (volumeFinal * MIX_MAX_VOLUME) / 100;
+        
+        // Aplica o volume calculado ao som
+        Mix_VolumeChunk(chunk, sdlVolume);
+        
+        // ... (O resto da sua lógica de rodízio de canais continua igual) ...
+        int canal = -1; 
+        bool ehSomImportante = (type == SomTipo::LANCAMENTO_PASSARO || 
+                                type == SomTipo::LANCAMENTO_PASSARO_CHUCK ||
+                                type == SomTipo::LANCAMENTO_PASSARO_BOMB ||
+                                type == SomTipo::LANCAMENTO_PASSARO_BLUE ||
+                                type == SomTipo::ESTILINGUE_SOLTANDO ||
+                                type == SomTipo::COLISAO_PASSARO ||
+                                type == SomTipo::MORTE_PASSARO ||
+                                type == SomTipo::PORCO);
+
+        if (ehSomImportante) {
+            static int proximoCanalReservado = 0;
+            canal = proximoCanalReservado;
+            proximoCanalReservado++;
+            if (proximoCanalReservado >= 4) {
+                proximoCanalReservado = 0; 
+            }
+        }
+        
+        // Toca
+        Mix_PlayChannel(canal, chunk, 0);
+
+    } else {
+        // printf("AVISO DE AUDIO: Som nao encontrado.\n");
+    }
+}
+
 void AudioManager::playMusic(MusicaTipo tipo, int volume) {
     Mix_Music* targetMusic = nullptr;
     switch (tipo) {
-            case MusicaTipo::MENU:
-                targetMusic = musicaMenu;
-                break;
-            case MusicaTipo::JOGO:
-                targetMusic = musicaJogo;
-                break;
-            case MusicaTipo::VITORIA:
-                targetMusic = somVitoria;
-                break;
-            case MusicaTipo::DERROTA:
-                targetMusic = somDerrota;
-                break;
-            default:
-                break;
-        }
+            case MusicaTipo::MENU: targetMusic = musicaMenu; break;
+            case MusicaTipo::JOGO: targetMusic = musicaJogo; break;
+            case MusicaTipo::VITORIA: targetMusic = somVitoria; break;
+            case MusicaTipo::DERROTA: targetMusic = somDerrota; break;
+            default: break;
+    }
 
     if (targetMusic) {
-        // Toca a música em loop (-1)
-        // O SDL_mixer troca automaticamente (para a anterior e inicia a nova)
         if (volume < 0) volume = 0;
         if (volume > 100) volume = 100;
         
-        int sdlVolume = (volume * MIX_MAX_VOLUME) / 100;
+        // --- CORREÇÃO TAMBÉM NA MÚSICA ---
+        float fatorGlobal = masterVolumePercent / 100.0f;
+        int volumeFinal = (int)(volume * fatorGlobal);
+        
+        // Aplica a redução da música (/ 1.5) E o volume mestre
+        int sdlVolume = ((volumeFinal / 1.5f) * MIX_MAX_VOLUME) / 100;
+        
         Mix_VolumeMusic(sdlVolume);
         if (Mix_PlayMusic(targetMusic, -1) == -1) {
             printf("Erro ao tocar musica: %s\n", Mix_GetError());
@@ -123,16 +190,6 @@ void AudioManager::stopMusic() {
     musicaEstaTocando = false;
 }
 
-
-void AudioManager::setVolume(float volumePercent) {
-    if (volumePercent < 0) volumePercent = 0;
-    if (volumePercent > 100) volumePercent = 100;
-    int vol = (int)((volumePercent / 100.0f) * MIX_MAX_VOLUME);
-
-    Mix_Volume(-1, vol);      // Volume dos efeitos
-    Mix_VolumeMusic(vol / 1.5); // Volume da música (geralmente queremos música mais baixa que efeitos)
-}
-
 // Função auxiliar para carregar um som e mapeá-lo
 bool AudioManager::loadSound(SomTipo type, const std::string& path) {
     Mix_Chunk* chunk = Mix_LoadWAV(path.c_str());
@@ -145,53 +202,6 @@ bool AudioManager::loadSound(SomTipo type, const std::string& path) {
     return true;
 }
 
-
-void AudioManager::play(SomTipo type, int volume) {
-    auto it = soundChunks.find(type);
-    if (it != soundChunks.end()) {
-        Mix_Chunk* chunk = it->second;
-
-        // Converte volume (0-100) para SDL (0-128)
-        int sdlVolume = (volume * MIX_MAX_VOLUME) / 100;
-        Mix_VolumeChunk(chunk, sdlVolume);
-        
-        // --- LÓGICA DE PRIORIDADE E RODÍZIO ---
-        int canal = -1; // -1 significa "qualquer canal livre não-reservado" (canais 4 a 31)
-
-        // Verifica se é um som importante (VIP)
-        bool ehSomImportante = (type == SomTipo::LANCAMENTO_PASSARO || 
-                                type == SomTipo::LANCAMENTO_PASSARO_CHUCK ||
-                                type == SomTipo::LANCAMENTO_PASSARO_BOMB ||
-                                type == SomTipo::LANCAMENTO_PASSARO_BLUE ||
-                                type == SomTipo::ESTILINGUE_SOLTANDO ||
-                                type == SomTipo::COLISAO_PASSARO ||
-                                type == SomTipo::MORTE_PASSARO ||
-                                type == SomTipo::PORCO);
-
-        if (ehSomImportante) {
-            // --- NOVO: Sistema de Rodízio ---
-            // A variável 'static' mantém seu valor entre chamadas diferentes da função.
-            // Começa em 0, e a cada som importante, muda para o próximo.
-            static int proximoCanalReservado = 0;
-
-            canal = proximoCanalReservado;
-
-            // Avança para o próximo canal reservado (Temos 4 reservados: 0, 1, 2, 3)
-            proximoCanalReservado++;
-            if (proximoCanalReservado >= 4) {
-                proximoCanalReservado = 0; // Volta para o 0 (Loop)
-            }
-        }
-        
-        // Toca o som
-        // Se canal for -1: Toca em qualquer um do 4 ao 31.
-        // Se canal for 0, 1, 2 ou 3: Toca especificamente nele, sobrepondo se necessário, mas protegendo os outros.
-        Mix_PlayChannel(canal, chunk, 0);
-
-    } else {
-        // printf("AVISO DE AUDIO: Som nao encontrado.\n");
-    }
-}
 
 void AudioManager::cleanup() {
     // Libera músicas

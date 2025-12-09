@@ -29,6 +29,8 @@ class AudioManager {
 private:
 // Mapa para Efeitos Sonoros (Tiros, Colisões)
     std::map<SomTipo, Mix_Chunk*> soundChunks;
+
+    float masterVolumePercent = 100.0f;
     
     // --- NOVO: Variáveis para Música ---
     Mix_Music* musicaMenu = nullptr;

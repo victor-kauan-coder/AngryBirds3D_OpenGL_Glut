@@ -28,7 +28,6 @@ public:
         return projectiles; 
     }
     
-    // Override to use box shape
     void inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ);
 };
 

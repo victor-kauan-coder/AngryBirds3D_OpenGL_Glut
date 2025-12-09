@@ -43,12 +43,25 @@ SlingshotManager::SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* proj
       pouchPullDepthZ(0.0f),
       damageCount(0),
       slingshotBody(nullptr),
-      damageCooldown(0.0f)
+      damageCooldown(0.0f),
+      slingshotModel(new OBJModel())
 {
+    slingshotModel->loadFromFile("Objetos/slingshot.obj");
+    slingshotModel->loadMTL("Objetos/slingshot.mtl");
+    extern GLuint loadGlobalTexture(const char* filename); // Declaração se necessário
+    crackTextureID = loadGlobalTexture("Objetos/texturas/crack.png"); 
+
+    if (crackTextureID == 0) {
+        printf("ERRO: Textura de rachadura nao encontrada!\n");
+    }
     initGeometry();
 }
 
 SlingshotManager::~SlingshotManager() {
+    if (slingshotModel) {
+        delete slingshotModel;
+        slingshotModel = nullptr;
+    }
     if (slingshotBody) {
         // --- CORREÇÃO CRÍTICA PARA EVITAR CRASH ---
         // É OBRIGATÓRIO remover o corpo do mundo antes de deletar o ponteiro.
@@ -76,22 +89,27 @@ void SlingshotManager::initGeometry() {
     // Define a posição da base (cabo) e o início dos braços da forquilha
     float slingshotPosZ = 16.0f; // <-- Defina a profundidade aqui
 
-    // Define a posição da base (cabo) e o início dos braços da forquilha
-    handleBaseX = 0.0f;
-    handleBaseY = 0.0f;
-    handleBaseZ = slingshotPosZ; // <-- MUDADO
+    // Ajuste para coincidir com o modelo 3D escalado (8x) e transladado (+2.5Y)
+    // O modelo visual começa em Y=2.5.
+    // A forquilha do modelo parece estar bem mais alta agora.
     
+    handleBaseX = 0.0f;
+    handleBaseY = 2.5f; // Base visual começa em 2.5
+    handleBaseZ = slingshotPosZ; 
+    
+    // Ajustando a altura dos braços para acompanhar a escala
+    // Valores estimados visualmente para o modelo escalado em 8x
     leftArmBaseX = 0.0f;
-    leftArmBaseY = 3.0f;
-    leftArmBaseZ = slingshotPosZ; // <-- MUDADO
+    leftArmBaseY = 3.5f; // Baixando de 5.5 para 3.5
+    leftArmBaseZ = slingshotPosZ; 
     
     rightArmBaseX = 0.0f;
-    rightArmBaseY = 3.0f;
-    rightArmBaseZ = slingshotPosZ; // <-- MUDADO
+    rightArmBaseY = 3.5f; // Baixando de 5.5 para 3.5
+    rightArmBaseZ = slingshotPosZ; 
     
     // Define os parâmetros da forquilha (forma de "Y")
-    float armHeight = 2.5f; // Comprimento de cada braço da forquilha
-    float angle = 30.0f * M_PI / 180.0f; // Ângulo de 30 graus (convertido para radianos)
+    float armHeight = 1.5f; // Baixando de 3.0 para 1.5
+    float angle = 35.0f * M_PI / 180.0f; // Ângulo um pouco mais aberto
     
     // Calcula a posição da PONTA ESQUERDA da forquilha usando trigonometria
     leftForkTipX = leftArmBaseX + sin(angle) * armHeight;
@@ -670,29 +688,42 @@ void SlingshotManager::drawCylinder(float x1, float y1, float z1, float x2, floa
  * @brief Desenha a base de madeira usando a função drawCylinder.
  */
 void SlingshotManager::drawWoodenBase() {
-    glColor3f(0.30f, 0.18f, 0.06f); // Cor de madeira
-    
-    // Desenha o cabo (da base até o centro da forquilha)
-    drawCylinder(handleBaseX, handleBaseY, handleBaseZ,
-                 leftArmBaseX, leftArmBaseY, leftArmBaseZ,
-                 0.3); // Raio de 0.3
-    
-    // Desenha o braço esquerdo da forquilha
-    drawCylinder(leftArmBaseX, leftArmBaseY, leftArmBaseZ,
-                 leftForkTipX, leftForkTipY, leftForkTipZ,
-                 0.2); // Raio de 0.2
-    
-    // Desenha o braço direito da forquilha
-    drawCylinder(rightArmBaseX, rightArmBaseY, rightArmBaseZ,
-                 rightForkTipX, rightForkTipY, rightForkTipZ,
-                 0.2); // Raio de 0.2
+    // 1. LIMPEZA E PREPARAÇÃO DA MÁSCARA
+    glClear(GL_STENCIL_BUFFER_BIT); // Limpa a máscara (tudo vira 0)
+    glEnable(GL_STENCIL_TEST);      // Liga o sistema de recorte
 
-    // Desenha rachaduras se houver dano
-    if (damageCount > 0) {
+    // 2. GRAVAÇÃO DA MÁSCARA (Fase de Desenho do Estilingue)
+    // "Sempre que desenhar um pixel do estilingue, grave o número 1 na máscara"
+    glStencilFunc(GL_ALWAYS, 1, 0xFF); 
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+    glPushMatrix();
+    glTranslatef(handleBaseX, handleBaseY, handleBaseZ);
+    glScalef(8.0f, 8.0f, 8.0f);
+
+    glEnable(GL_TEXTURE_2D); 
+    glColor3f(1.0f, 1.0f, 1.0f); 
+
+    if (slingshotModel) {
+        slingshotModel->draw(); // <--- ONDE A MÁGICA ACONTECE (Grava os 1s)
+    }
+    
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
+
+    // 3. USO DA MÁSCARA (Fase de Desenho da Rachadura)
+    // "Só desenhe a rachadura se a máscara naquele pixel for igual a 1"
+    glStencilFunc(GL_EQUAL, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP); // Não mexe mais na máscara
+
+    // Desenha as rachaduras (agora elas serão cortadas onde não tem madeira)
+    if (damageCount >= 1) { // Mudei para >= 1 para garantir que desenhe algo se tiver dano
         drawCracks();
     }
+    
+    // 4. DESLIGA O STENCIL (Para não estragar o resto do jogo)
+    glDisable(GL_STENCIL_TEST);
 }
-
 /**
  * @brief Desenha as duas bandas elásticas como linhas 3D.
  */
@@ -959,37 +990,111 @@ btRigidBody* SlingshotManager::getRigidBody() const {
 }
 
 void SlingshotManager::drawCracks() {
-    glDisable(GL_LIGHTING);
-    glColor3f(0.0f, 0.0f, 0.0f); // Preto para as rachaduras
-    glLineWidth(2.0f);
+    if (crackTextureID == 0) return;
 
-    // Rachaduras simples (linhas aleatórias pré-definidas)
-    glBegin(GL_LINES);
+    // 1. BLINDAGEM
+    glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT | GL_TEXTURE_BIT);
+
+    // 2. CONFIGURAÇÕES VISUAIS
+    glDisable(GL_LIGHTING); // Sem luz para destacar bem o preto da rachadura
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, crackTextureID);
+    
+    // Offset para garantir que apareça sobre a madeira
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-3.0f, -3.0f); 
+
+    glColor3f(1.0f, 1.0f, 1.0f); 
+
+    // --- MUDANÇA: TAMANHOS GIGANTES ---
+    // Graças ao Stencil, podemos usar valores enormes.
+    // Isso garante que a textura cubra toda a superfície da madeira.
+    
+    float wCabo = 0.8f;  // Cabo bem largo
+    float hCabo = 2.0f;  // Altura exagerada para cobrir o cabo todo
+    
+    float wBraco = 1.0f; // Largura suficiente para cobrir o braço e sobrar
+    float hBraco = 2.5f; // Comprimento para cobrir o braço todo
+
+    float zFino = 0.1f;  // Distância de segurança
+
+    glBegin(GL_QUADS);
+
+    // --- Dano 1: Base Inteira ---
     if (damageCount >= 1) {
-        // Rachadura no cabo
-        glVertex3f(handleBaseX - 0.2f, handleBaseY + 1.0f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
+        float x = handleBaseX;
+        float y = handleBaseY + 1.0f; // Centralizado no cabo
         
-        glVertex3f(handleBaseX + 0.2f, handleBaseY + 1.5f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX - 0.1f, handleBaseY + 2.0f, handleBaseZ + 0.4f);
+        // FRENTE
+        float zFront = handleBaseZ + 0.5f + zFino;
+        glTexCoord2f(0, 0); glVertex3f(x - wCabo, y - hCabo, zFront);
+        glTexCoord2f(1, 0); glVertex3f(x + wCabo, y - hCabo, zFront);
+        glTexCoord2f(1, 1); glVertex3f(x + wCabo, y + hCabo, zFront);
+        glTexCoord2f(0, 1); glVertex3f(x - wCabo, y + hCabo, zFront);
+
+        // COSTAS
+        float zBack = handleBaseZ - 0.5f - zFino;
+        glTexCoord2f(0, 0); glVertex3f(x - wCabo, y - hCabo, zBack);
+        glTexCoord2f(1, 0); glVertex3f(x + wCabo, y - hCabo, zBack);
+        glTexCoord2f(1, 1); glVertex3f(x + wCabo, y + hCabo, zBack);
+        glTexCoord2f(0, 1); glVertex3f(x - wCabo, y + hCabo, zBack);
     }
     
+    // --- Dano 2: Braço Esquerdo COMPLETO ---
     if (damageCount >= 2) {
-        // Rachadura no braço esquerdo
-        glVertex3f(leftArmBaseX, leftArmBaseY + 0.5f, leftArmBaseZ + 0.3f);
-        glVertex3f(leftArmBaseX - 0.3f, leftArmBaseY + 1.5f, leftArmBaseZ + 0.3f);
+        // Ponto médio do braço esquerdo
+        float x = leftArmBaseX + (leftForkTipX - leftArmBaseX) * 0.5f; 
+        float y = leftArmBaseY + (leftForkTipY - leftArmBaseY) * 0.5f;
+        
+        float zFront = leftArmBaseZ + 0.3f + zFino;
+        float zBack = leftArmBaseZ - 0.3f - zFino;
+
+        // FRENTE (Quadrado Gigante)
+        glTexCoord2f(0, 0); glVertex3f(x - wBraco, y - hBraco, zFront);
+        glTexCoord2f(1, 0); glVertex3f(x + wBraco, y - hBraco, zFront);
+        glTexCoord2f(1, 1); glVertex3f(x + wBraco, y + hBraco, zFront);
+        glTexCoord2f(0, 1); glVertex3f(x - wBraco, y + hBraco, zFront);
+
+        // COSTAS
+        glTexCoord2f(0, 0); glVertex3f(x - wBraco, y - hBraco, zBack);
+        glTexCoord2f(1, 0); glVertex3f(x + wBraco, y - hBraco, zBack);
+        glTexCoord2f(1, 1); glVertex3f(x + wBraco, y + hBraco, zBack);
+        glTexCoord2f(0, 1); glVertex3f(x - wBraco, y + hBraco, zBack);
     }
     
+    // --- Dano 3: Braço Direito COMPLETO ---
     if (damageCount >= 3) {
-        // Rachadura no braço direito (crítica)
-        glVertex3f(rightArmBaseX, rightArmBaseY + 0.5f, rightArmBaseZ + 0.3f);
-        glVertex3f(rightArmBaseX + 0.3f, rightArmBaseY + 1.5f, rightArmBaseZ + 0.3f);
-        
-        glVertex3f(handleBaseX, handleBaseY + 2.5f, handleBaseZ + 0.4f);
-        glVertex3f(handleBaseX, handleBaseY + 0.5f, handleBaseZ + 0.4f);
+        float x = rightArmBaseX + (rightForkTipX - rightArmBaseX) * 0.5f;
+        float y = rightArmBaseY + (rightForkTipY - rightArmBaseY) * 0.5f;
+
+        float zFront = rightArmBaseZ + 0.3f + zFino;
+        float zBack = rightArmBaseZ - 0.3f - zFino;
+
+        // FRENTE
+        glTexCoord2f(0, 0); glVertex3f(x - wBraco, y - hBraco, zFront);
+        glTexCoord2f(1, 0); glVertex3f(x + wBraco, y - hBraco, zFront);
+        glTexCoord2f(1, 1); glVertex3f(x + wBraco, y + hBraco, zFront);
+        glTexCoord2f(0, 1); glVertex3f(x - wBraco, y + hBraco, zFront);
+
+        // COSTAS
+        glTexCoord2f(0, 0); glVertex3f(x - wBraco, y - hBraco, zBack);
+        glTexCoord2f(1, 0); glVertex3f(x + wBraco, y - hBraco, zBack);
+        glTexCoord2f(1, 1); glVertex3f(x + wBraco, y + hBraco, zBack);
+        glTexCoord2f(0, 1); glVertex3f(x - wBraco, y + hBraco, zBack);
     }
 
     glEnd();
-    glEnable(GL_LIGHTING);
+    glPopAttrib();
+}
+
+int SlingshotManager::getHealth() const {
+    // A vida máxima é 3. Subtraímos o dano atual.
+    // Se damageCount for 0, retorna 3 corações.
+    // Se damageCount for 1, retorna 2 corações.
+    int vida = 3 - damageCount;
+    if (vida < 0) vida = 0;
+    return vida;
 }

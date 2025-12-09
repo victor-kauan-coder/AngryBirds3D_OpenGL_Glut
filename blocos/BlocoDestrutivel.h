@@ -9,25 +9,18 @@
 #include <GL/glut.h>
 #include <btBulletDynamicsCommon.h>
 
+#include "../util/enums.h"
 #include "../util/loads.h"
 #include "ParticleManager.h"
 #include "../controle_audio/audio_manager.h"
 #include "../stb/stb_image.h"
 #include "../util/enums.h"
 
-enum class EstadoDano {
-    INTEIRO,
-    DANIFICADO,
-    MORRENDO,
-    DESTRUIDO
-};
-
 extern ParticleManager g_particleManager;
 extern AudioManager g_audioManager;
 
 class BlocoDestrutivel : public OBJModel {
 private:
-    // --- MUDANÇA 1: Escala separada por eixo ---
     float scaleX, scaleY, scaleZ; 
     
     bool estaAnimandoDano;
@@ -133,7 +126,7 @@ public:
         switch (tipoMaterial) {
             case MaterialTipo::GELO:
                 prefixoTextura = "gelo";
-                massa = 4.0f; saudeTotal = 10.0f; atrito = 0.1f; restituicao = 0.2f; pontuacaoValor = 150;
+                massa = 4.0f; saudeTotal = 2.0f; atrito = 0.1f; restituicao = 0.2f; pontuacaoValor = 150;
                 corR = 0.7f; corG = 0.8f; corB = 1.0f; break;
             case MaterialTipo::PEDRA:
                 prefixoTextura = "pedra";
@@ -153,12 +146,10 @@ public:
 
         carregarModeloCacheado(modeloPath);
 
-        // --- MUDANÇA 2: Cálculo Robusto de Escala ---
         // Calcula o tamanho real do modelo carregado (Bounding Box)
         float minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
         
         if (vertices.empty()) {
-            // Fallback se o modelo falhar: assume tamanho 1.0
             scaleX = w; scaleY = h; scaleZ = d;
         } else {
             for (size_t i = 0; i < vertices.size(); i += 3) {
@@ -265,6 +256,7 @@ public:
             if (corpoRigido) {
                 btVector3 pos = corpoRigido->getCenterOfMassPosition();
                 g_particleManager.createExplosion(pos, btVector3(corR, corG, corB));
+                g_particleManager.createScorePopup(pos, pontuacaoValor); 
                 g_audioManager.playDestruction(tipoMaterial);
             }
         }
@@ -280,9 +272,7 @@ public:
         if (estaAnimandoDano) glTranslatef(sin(animDanoTimer * 100.0f) * 0.05f, 0, 0);
         if (estaAnimandoDestruicao) { float t = (animDestruicaoTimer / animDestruicaoDuracao); float s = 1.0f - t; glScalef(s, s, s); }
         
-        // --- MUDANÇA 3: Aplica a escala não-uniforme ---
-        // Isso garante que o modelo (independente de ser cubo, barra ou placa)
-        // seja esticado para preencher exatamente a caixa de colisão física.
+        // Isso garante que o modelo (independente de ser cubo, barra ou placa) seja esticado para preencher exatamente a caixa de colisão física.
         glScalef(scaleX, scaleY, scaleZ);
         
         OBJModel::draw();

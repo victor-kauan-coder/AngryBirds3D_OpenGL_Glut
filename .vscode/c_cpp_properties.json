@@ -3,7 +3,8 @@
         {
             "name": "Win32",
             "includePath": [
-                "C:\\msys64\\mingw64\\include\\bullet\\BulletDynamics"
+                "C:\\msys64\\mingw64\\include\\bullet\\BulletDynamics",
+                "${workspaceFolder}/blocos"
             ],
             "defines": [
                 "_DEBUG",

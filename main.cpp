@@ -39,35 +39,35 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// --- Includes de Áudio (exemplo) ---
-// (espaço para seus includes de áudio)
-extern AudioManager g_audioManager;
 
-// Vetor para pássaros extras (habilidade do Blue)
 std::vector<Passaro*> extraBirds;
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
 
 
-// --- VARIÁVEIS GLOBAIS NOVAS ---
 //variaveis para o frame do jogo 
 int frameCount = 0;
 int previousTime = 0;
 float fps = 0.0f;
 // Mundo de física Bullet
 btDiscreteDynamicsWorld* dynamicsWorld;
+//array para armazenar as collisions shapes para que possam ser limpas depois
 btAlignedObjectArray<btCollisionShape*> collisionShapes;
-btCollisionShape* projectileShape = nullptr; // Mantido para o Bullet
+// forma de colisão do projetil (passaro), blocos e chão
+btCollisionShape* projectileShape = nullptr;
 btCollisionShape* boxShape = nullptr;
 btRigidBody* groundRigidBody = nullptr;
+// fase ampla(broadphase), configuração de colisão, despachante e solucionador
 btBroadphaseInterface* broadphase = nullptr;
-btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
-btCollisionDispatcher* dispatcher = nullptr;
-btSequentialImpulseConstraintSolver* solver = nullptr;
+btDefaultCollisionConfiguration* collisionConfiguration = nullptr; // aloca memoria para os manifolds
+btCollisionDispatcher* dispatcher = nullptr; //escolhe o algoritmo de detecção de colisão (esfera x triangulo por exemplo)
+btSequentialImpulseConstraintSolver* solver = nullptr; //calcula a física a ser aplicada nos objetos colidindo
+
+// Gerenciador de áudio global e gerenciador de partículas
+extern AudioManager g_audioManager; //instanciado em sdl_audio_manager.cpp
 ParticleManager g_particleManager;
-// AudioManager g_audioManager;
-// Modelos OBJ globais
+
 OBJModel blockModel;
 OBJModel treeModel;
 bool treeModelLoaded = false;
@@ -81,9 +81,9 @@ btVector3 animEndPos;
 //MENU
 GameMenu* g_menu = nullptr; // Ponteiro para o menu
 GameState g_currentState = STATE_MENU;
-static float ultimoSomImpacto = 0.0f;
 
 GLuint g_skyTextureID = 0;
+GLuint g_heartTextureID = 0;
 
 //vetor para armazenar as arvores 
 std::vector<Tree> trees;
@@ -102,50 +102,63 @@ bool gameOver = false;
 bool gameWon = false;  // Vitória
 bool gameLost = false; // Derrota
 
-std::vector<btRigidBody*> targetBodies;
 std::vector<Passaro*>::iterator itPassaroAtual; // Iterador para a fila
 Passaro* passaroAtual = nullptr;
 Cannon* canhao = nullptr;
 // Fila de pássaros
 std::vector<Passaro*> filaPassaros;
+//vetor de blocos destrutiveis
 std::vector<BlocoDestrutivel*> blocos;
+//vetro de porcos
 std::vector<Porco*> porcos;
+//vetor de canhoes
 std::vector<Cannon*> canhoes;
-// --- Funções do Jogo ---el*> blocos;
-// --- Funções do Jogo ---
 
+//calcula o proximo passaro da fila e faz a animação da fila andar e do pulo do passaro atual
 void proximoPassaro() {
+    //pega o proximo passaro no vetor
     itPassaroAtual++;
-    
-    if (itPassaroAtual != filaPassaros.end()) {
+    if (itPassaroAtual != filaPassaros.end()++) {
         passaroAtual = *itPassaroAtual;
         
-        // --- 1. CONFIGURA O PULO DO PÁSSARO ATUAL ---
+        //CONFIGURA O PULO DO PÁSSARO ATUAL
         if (g_slingshotManager) {
             animandoEntradaPassaro = true;
             animEntradaTimer = 0.0f;
             
-            animStartPos = passaroAtual->getPosFila();
+            animStartPos = passaroAtual->getPosFila(); //posição inicial (na fila)
             float px, py, pz;
-            g_slingshotManager->getPouchPosition(px, py, pz);
-            animEndPos = btVector3(px, py, pz);
+            g_slingshotManager->getPouchPosition(px, py, pz);// posição do estilingue
+            animEndPos = btVector3(px, py, pz);// posição final (no estilingue)
             
-            // modificar para cada passaro
-            // g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO, 50);
+            std::string tipo_passaro = passaroAtual->getTipo();
+            //qual som tocar dependendo do tipo do pássaro
+            if (tipo_passaro == "Bomb") {
+                g_audioManager.playPassaro(SomTipo::BOMB_SELECIONADO, 100);
+            } 
+            else if (tipo_passaro == "Blue") {
+                g_audioManager.playPassaro(SomTipo::BLUE_SELECIONADO, 100);
+            } 
+            else if (tipo_passaro == "Chuck") {
+                g_audioManager.playPassaro(SomTipo::CHUCK_SELECIONADO, 120);
+            } 
+            else {
+                // Default: Som do Red ou genérico
+                g_audioManager.playPassaro(SomTipo::RED_SELECIONADO, 100);
+            }
         }
         
-        // --- 2. FAZ A FILA ANDAR (CORRIGIDO) ---
+        //FAZ A FILA ANDAR
         float gap = 1.8f; 
         auto itFila = itPassaroAtual; 
+        //começa do próximo pássaro na fila
         itFila++; 
-        
         for (; itFila != filaPassaros.end(); ++itFila) {
             Passaro* p = *itFila;
             if (p->isNaFila()) {
                 btVector3 posAntiga = p->getPosFila();
                 // Calcula o destino (um "gap" para a direita)
                 btVector3 novoDestino(posAntiga.x() + gap, posAntiga.y(), posAntiga.z());
-                
                 // Inicia a animação de caminhada/pulo da fila
                 p->caminharNaFilaPara(novoDestino);
             }
@@ -153,6 +166,7 @@ void proximoPassaro() {
         
         printf("Proximo passaro pulando e fila andando...\n");
     } else {
+        //acabaram os pássaros
         passaroAtual = nullptr;
         if (g_slingshotManager) {
             g_slingshotManager->setProjectile(nullptr);
@@ -161,34 +175,10 @@ void proximoPassaro() {
     }
 }
 
-btRigidBody* createTargetBox(float mass, const btVector3& position, const btQuaternion& rotation = btQuaternion(0, 0, 0, 1)) {
-    btTransform startTransform;
-    startTransform.setIdentity();
-    startTransform.setOrigin(position);
-    startTransform.setRotation(rotation); // <-- ÚNICA LINHA ADICIONADA/MODIFICADA
-    
-    btVector3 localInertia(0, 0, 0);
-    if (mass != 0.f)
-        boxShape->calculateLocalInertia(mass, localInertia);
-    
-    btDefaultMotionState* myMotionState = new btDefaultMotionState(startTransform);
-    btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, boxShape, localInertia);
-    btRigidBody* body = new btRigidBody(rbInfo);
-    
-    // Configurações de CCD e física
-    body->setCcdMotionThreshold(0.5f);
-    body->setFriction(2.0f);
-    body->setRestitution(0.1f);
-    body->setDamping(0.3f, 0.3f);
-    
-    dynamicsWorld->addRigidBody(body);
-    targetBodies.push_back(body);
-    return body;
-}
-
+//carrega uma textura e retorna o ID dela
 GLuint loadGlobalTexture(const char* filename) {
-    int width, height, nrChannels;
-    stbi_set_flip_vertically_on_load(true); 
+    int width, height, nrChannels; // nrchannels = numero de canais de cor
+    stbi_set_flip_vertically_on_load(true); //openGl considera imagens de baixo para cima
     
     unsigned char* data = stbi_load(filename, &width, &height, &nrChannels, 0);
     if (!data) {
@@ -196,17 +186,22 @@ GLuint loadGlobalTexture(const char* filename) {
         return 0; 
     }
 
-    GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+    GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB; //rgb tem 3 canais e rgba tem 4 canais
 
+    //pede para a placa de video uma textura para mexer
     GLuint textureID;
     glGenTextures(1, &textureID); 
     glBindTexture(GL_TEXTURE_2D, textureID); 
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP); // <-- MUDANÇA AQUI
+    //configura a textura
+    //estica a imagem para preencher a textura
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    //envia para a palca de video a imagem carregada
     glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
 
     stbi_image_free(data);
@@ -214,6 +209,7 @@ GLuint loadGlobalTexture(const char* filename) {
     return textureID;
 }
 
+//limpeza de recursos do bullet
 void cleanupBullet() {
     // Limpa pássaros extras
     for (auto* bird : extraBirds) {
@@ -225,8 +221,8 @@ void cleanupBullet() {
     if (dynamicsWorld) {
         // Remove todos os objetos
         for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-            btRigidBody* body = btRigidBody::upcast(obj);
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];// itera pelos objetos no mundo físico
+            btRigidBody* body = btRigidBody::upcast(obj); //converte em btrigidbody(filho de collisionobject)
             if (body && body->getMotionState()) {
                 delete body->getMotionState();
             }
@@ -242,13 +238,12 @@ void cleanupBullet() {
     if (broadphase) { delete broadphase; broadphase = nullptr; }
     
     collisionShapes.clear();
-    targetBodies.clear();
     // groundRigidBody, projectileShape, boxShape são deletados no loop de objetos ou limpos acima
     groundRigidBody = nullptr;
     projectileShape = nullptr;
     boxShape = nullptr;
 }
-
+//inicialização do bullet
 void initBullet() {
     // Garante que está limpo antes de iniciar
     if (dynamicsWorld) {
@@ -256,54 +251,35 @@ void initBullet() {
     }
 
     // 1. Inicialização do Mundo Físico
-    broadphase = new btDbvtBroadphase();
-    collisionConfiguration = new btDefaultCollisionConfiguration();
-    dispatcher = new btCollisionDispatcher(collisionConfiguration);
+    broadphase = new btDbvtBroadphase(); //dynamic bounding volume tree broadphase
+    collisionConfiguration = new btDefaultCollisionConfiguration(); //aloca espaço para os manifolds
+    dispatcher = new btCollisionDispatcher(collisionConfiguration); 
     solver = new btSequentialImpulseConstraintSolver();
     
     dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
-    dynamicsWorld->setGravity(btVector3(0, -9.81f, 0));
+    dynamicsWorld->setGravity(btVector3(0, -9.81f, 0)); //gravidade da terra
     
-    // 2. Chão
-    btCollisionShape* groundShape = new btStaticPlaneShape(btVector3(0, 1, 0), 0);
+    //Chão
+    btCollisionShape* groundShape = new btStaticPlaneShape(btVector3(0, 1, 0), 0); //plano estático infinito
     collisionShapes.push_back(groundShape);
     
     btDefaultMotionState* groundMotionState = new btDefaultMotionState(
         btTransform(btQuaternion(0, 0, 0, 1), btVector3(0, 0, 0)));
     
     btRigidBody::btRigidBodyConstructionInfo groundRigidBodyCI(
-        0, groundMotionState, groundShape, btVector3(0, 0, 0));
-    
+        0, groundMotionState, groundShape, btVector3(0, 0, 0));//massa 0 = estático
     groundRigidBody = new btRigidBody(groundRigidBodyCI);
+
     groundRigidBody->setFriction(2.0f);
-    dynamicsWorld->addRigidBody(groundRigidBody);
+    dynamicsWorld->addRigidBody(groundRigidBody); //adiciona o chão ao mundo físico
 
     // 3. Shapes Auxiliares
     projectileShape = new btSphereShape(0.3f); 
     collisionShapes.push_back(projectileShape);
     
-    boxShape = new btBoxShape(btVector3(0.2f, 0.2f, 1.2f));
+    boxShape = new btBoxShape(btVector3(0.2f, 0.2f, 1.2f)); //caixa para os blocos
     collisionShapes.push_back(boxShape);
     
-    targetBodies.clear(); 
-
-    // ==========================================
-    // === CONSTRUÇÃO: MINI FORTALEZA ===
-    // (Configurada para seu Auto-Scale)
-    // ==========================================
-// ==========================================================
-    // === 1. DEFINIÇÕES GLOBAIS (NÃO APAGUE) ===
-    // ==========================================================
-    // --- Criando Porcos ---
-    // (Movido para depois da construção da fortaleza para usar as coordenadas corretas)
-
-
-    // NÍVEL 3: Teto (Gelo - Placa)
-    // NÍVEL 3: Teto (Gelo - Placa)
-    // (Criando uma placa de 6x1x6)
-    // BlocoDestrutivel* b4 = new BlocoDestrutivel(MaterialTipo::GELO, modeloBarra, 6.0f, 1.0f, 6.0f);
-    // b4->inicializarFisica(dynamicsWorld, centro + btVector3(-L/2, Y_NIVEL3, 0), rotX);
-    // blocos.push_back(b4);
     const char* pathPilar = "Objetos/bloco_barra.obj"; 
     const char* pathPlaca = "Objetos/bloco_placa.obj"; 
     
@@ -311,49 +287,43 @@ void initBullet() {
     float escala = 0.5f; 
     float unit = escala; 
 
-    // Dimensões dos Blocos
+    // Dimensões dos Blocos(PIlar)
     float pilarW = 1.0f * unit; 
     float pilarH = 6.0f * unit; 
     float pilarD = 1.0f * unit; 
-
+    // Dimensões dos Blocos(Placa)
     float placaW = 6.0f * unit; 
     float placaH = 1.0f * unit; 
     float placaD = 6.0f * unit; 
 
-    // --- POSIÇÃO ---
-    // Z = -20.0f (Perto o suficiente para ver os detalhes)
     btVector3 centro(0.0f, 0.0f, -50.0f); 
     btQuaternion rot(0, 0, 0, 1);         
 
-   float distanciaSeparacao = 35.0f * unit; 
-    float avancoZ = 15.0f * unit; 
-    float margin = 0.00f; 
-    float distZ_Pilar = 2.0f * unit; 
+    float distanciaSeparacao = 35.0f * unit; // distancia entre torres
+    float avancoZ = 15.0f * unit; // avanço da torre do meio
+    float margin = 0.00f; // margem entre blocos
+    float distZ_Pilar = 2.0f * unit; // distância Z dos pilares em relação à placa central
 
     // Define para onde os canhões vão mirar (Ex: Posição inicial do estilingue)
     btVector3 alvoCanhao(0.0f, 5.0f, 30.0f); 
 
     auto estabilizarRigidBody = [&](btRigidBody* rb) {
         if(rb) {
-            // 1. ACORDA O BLOCO: A gravidade vai puxá-lo para baixo imediatamente
+            //ativa gravidade
             rb->activate(true); 
             
-            // 2. FREIO DE MÃO (Damping Alto):
             // Isso impede que a torre desmorone violentamente ao nascer.
             // Eles vão cair devagar até se acomodarem.
-            rb->setDamping(0.9f, 0.9f); 
-
-            // 3. ATRITO E PESO
+            rb->setDamping(0.9f, 0.9f); // alta amortecimento para evitar movimentos bruscos
             rb->setFriction(2.0f);
-            // rb->setMassProps(rb->getInvMass() == 0 ? 0 : 1.0f/rb->getInvMass(), btVector3(0,0,0)); // Opcional
         }
     };
-
+    //são 3 torres diferentes
     for (int idTorre = 0; idTorre < 3; idTorre++) {
         
         float centroXTorre;
         float centroZTorre;
-
+        //torre 0 vai para esquerda, torre 1 para direita, torre 2 vai para frente
         switch(idTorre){
             case 0: centroXTorre = centro.x() - (distanciaSeparacao/2.0f); centroZTorre = centro.z(); break;
             case 1: centroXTorre = centro.x() + (distanciaSeparacao/2.0f); centroZTorre = centro.z(); break;
@@ -363,9 +333,9 @@ void initBullet() {
         float currentY = 0.0f; 
         int totalAndares = 6;      
         int raioFixo = 1; 
-
+        //criar os andares da torre
         for (int andar = 0; andar < totalAndares; andar++) {
-            
+            //a escolha do material depende do andar
             MaterialTipo mat;
             if (andar <= 1) mat = MaterialTipo::PEDRA;      
             else if (andar <= 3) mat = MaterialTipo::MADEIRA; 
@@ -403,7 +373,7 @@ void initBullet() {
                     blocos.back()->inicializarFisica(dynamicsWorld, btVector3(xPos, yPlaca, zPos), rot);
                     estabilizarRigidBody(blocos.back()->getRigidBody());
 
-                    // --- INIMIGOS ---
+                    //Porcos
                     if (i == 0) { 
                         float yFinal = yPlaca + (placaH / 2.0f) + margin + 1.0f;
 
@@ -415,7 +385,7 @@ void initBullet() {
                             porcos.push_back(p);
                         }
                         
-                        // CANHÕES (Torre central)
+                        // canhão
                         if (idTorre == 2 && andar == 2) {
                             Cannon* c = new Cannon(xPos + 1.0f, yFinal, zPos, dynamicsWorld, alvoCanhao);
                             estabilizarRigidBody(c->getRigidBody());
@@ -427,18 +397,13 @@ void initBullet() {
             currentY += pilarH + placaH + margin;
         }
 
-    float yTopoPilar = currentY + (pilarH / 2.0f);
+        float yTopoPilar = currentY + (pilarH / 2.0f);
         float yTopoPlaca = currentY + pilarH + (placaH / 2.0f) + margin;
 
-        // CORREÇÃO CRÍTICA:
-        // No loop anterior, você usou 'float offsetZ = 3.0f'.
-        // O topo precisa acompanhar esse mesmo deslocamento para ficar em cima!
         float zCentroReal = centroZTorre + 3.0f; 
 
-        // Distância dos pilares para os cantos (para ficarem na borda da placa)
         float offsetCanto = 2.2f * unit; 
 
-        // --- CRIANDO OS 4 PILARES DE SUPORTE (Mesa) ---
         
         // 1. Frente-Esquerda
         blocos.push_back(new BlocoDestrutivel(MaterialTipo::MADEIRA, pathPilar, pilarW, pilarH, pilarD));
@@ -466,7 +431,6 @@ void initBullet() {
         blocos.back()->inicializarFisica(dynamicsWorld, btVector3(centroXTorre, yTopoPlaca, zCentroReal), rot);
         estabilizarRigidBody(blocos.back()->getRigidBody());
 
-        // --- INIMIGO NO TOPO ---
         float yTopoFinal = yTopoPlaca + (placaH / 2.0f) + margin + 1.5f;
 
         if (idTorre == 2) { 
@@ -477,7 +441,7 @@ void initBullet() {
              porcos.push_back(p);
         }
     }
-    // --- ÁRVORES ---
+    // === Configuração das Árvores no Cenário ===
     trees.clear();
     // Par 1: Extremos distantes
     trees.push_back(Tree( 55.0f, 0.0f, -55.0f, 19.0f));
@@ -488,8 +452,8 @@ void initBullet() {
     trees.push_back(Tree(-35.0f, 0.0f, -60.0f, 17.5f));
 
     // Par 3: Mais próximas do centro (mas atrás das torres)
-    trees.push_back(Tree( 12.0f, 0.0f, -65.0f, 18.0f));
-    trees.push_back(Tree(-12.0f, 0.0f, -65.0f, 18.0f));
+    trees.push_back(Tree( 12.0f, 0.0f, -59.0f, 18.0f));
+    trees.push_back(Tree(-12.0f, 0.0f, -59.0f, 18.0f));
 
 
     // === CAMADA 2: CAMPO MÉDIO (Ao redor das Torres) ===
@@ -522,20 +486,20 @@ void initBullet() {
 }
 
 void drawSky() {
-    glDisable(GL_LIGHTING);
+    glDisable(GL_LIGHTING); // não usa luz para o céu(sempre brilhante)
+    //sempre desenha o céu no fundo
     glDisable(GL_DEPTH_TEST); // O céu não deve testar profundidade
     glDepthMask(GL_FALSE);    // O céu não deve ESCREVER na profundidade
 
+    //usa a textura do céu
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, g_skyTextureID);
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    // Aumenta a área de visualização verticalmente para "dar zoom out" no céu
-    // Aumente o segundo parâmetro (top) para ver mais céu.
-    glOrtho(0, 1, 0, 1.2, -1, 1); // Exemplo: 0 a 1.5 no Y para "zoom out"
-                                  // Se 1.5 for demais, tente 1.2 ou 1.3
+    // Aumenta a área de visualização verticalmente para "dar zoom out" no céu aumente o segundo parâmetro (top) para ver mais céu.
+    glOrtho(0, 1, 0, 1.2, -1, 1); 
 
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
@@ -549,19 +513,18 @@ void drawSky() {
         // Canto inferior direito
         glTexCoord2f(1, 0); glVertex2f(1, 0); 
         // Canto superior direito
-        // Ajuste o glTexCoord2f(..., Y_TEXTURA_MAX) para puxar mais céu para baixo
-        // Se a imagem tiver mais céu na parte de cima que você quer mostrar:
         glTexCoord2f(1, 1); glVertex2f(1, 1.5); // O 1.5 aqui corresponde ao glOrtho
         // Canto superior esquerdo
         glTexCoord2f(0, 1); glVertex2f(0, 1.5); // O 1.5 aqui corresponde ao glOrtho
     glEnd();
 
-    glPopMatrix();
+    glPopMatrix(); //restaura a matrix de modelo
     glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
+    glPopMatrix(); //restaura a matrix de projeção
     glMatrixMode(GL_MODELVIEW);
 
     glDisable(GL_TEXTURE_2D);
+    //reabilitada o depth test e depth mask
     glDepthMask(GL_TRUE); // Habilita a escrita na profundidade novamente
     glEnable(GL_DEPTH_TEST); // Habilita o teste de profundidade novamente
 }
@@ -571,11 +534,11 @@ void drawGround() {
     
     glColor3f(0.3f, 0.6f, 0.3f);
     glBegin(GL_QUADS);
-    float tamanho = 60.0f;
-    glVertex3f(-tamanho, 0.0f, -tamanho);
-    glVertex3f(-tamanho, 0.0f, tamanho);
-    glVertex3f(tamanho, 0.0f, tamanho);
-    glVertex3f(tamanho, 0.0f, -tamanho);
+        float tamanho = 60.0f;
+        glVertex3f(-tamanho, 0.0f, -tamanho);
+        glVertex3f(-tamanho, 0.0f, tamanho);
+        glVertex3f(tamanho, 0.0f, tamanho);
+        glVertex3f(tamanho, 0.0f, -tamanho);
     glEnd();
     
     glColor3f(0.25f, 0.5f, 0.25f);
@@ -624,10 +587,15 @@ void drawHUD() {
     glPushMatrix();
     glLoadIdentity();
     
-    // --- HUD DURANTE O JOGO (Canto Superior) ---
+    // --- HUD DURANTE O JOGO ---
     if (!gameOver && !gameWon && !gameLost) {
-        // Fundo do HUD superior
-        glColor4f(0.0f, 0.0f, 0.0f, 0.5f);
+        
+        // Isso garante que tanto a barra quanto os corações fiquem transparentes
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        //Fundo do HUD (Barra Preta Translúcida)
+        glColor4f(0.0f, 0.0f, 0.0f, 0.4f); // 50% transparente
         glBegin(GL_QUADS);
             glVertex2f(0, HEIGHT);
             glVertex2f(0, HEIGHT - 60);
@@ -635,10 +603,56 @@ void drawHUD() {
             glVertex2f(WIDTH, HEIGHT);
         glEnd();
 
-        // FPS e Pontos
+        // Corações de Vida (Desenhados SOBRE a barra)
+        if (g_heartTextureID != 0 && g_slingshotManager) {
+            int vidaAtual = g_slingshotManager->getHealth();
+            
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, g_heartTextureID);
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f); // Branco puro para a textura
+
+            float heartSize = 40.0f;
+            float marginX = 20.0f;
+            float marginY = 10.0f; 
+            float padding = 5.0f;
+            float startY = HEIGHT - marginY; 
+
+            glBegin(GL_QUADS);
+            for (int i = 0; i < vidaAtual; i++) {
+                float x = marginX + (i * (heartSize + padding));
+                
+                glTexCoord2f(0, 1); glVertex2f(x, startY);
+                glTexCoord2f(1, 1); glVertex2f(x + heartSize, startY);
+                glTexCoord2f(1, 0); glVertex2f(x + heartSize, startY - heartSize);
+                glTexCoord2f(0, 0); glVertex2f(x, startY - heartSize);
+            }
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        } 
+        // Fallback: Quadrados vermelhos se a textura falhar
+        else if (g_slingshotManager) {
+             int vidaAtual = g_slingshotManager->getHealth();
+             glColor3f(1.0f, 0.0f, 0.0f); // Vermelho
+             float heartSize = 40.0f;
+             float startY = HEIGHT - 10.0f;
+             glBegin(GL_QUADS);
+             for (int i = 0; i < vidaAtual; i++) {
+                float x = 20.0f + (i * 45.0f);
+                glVertex2f(x, startY);
+                glVertex2f(x + heartSize, startY);
+                glVertex2f(x + heartSize, startY - heartSize);
+                glVertex2f(x, startY - heartSize);
+            }
+            glEnd();
+        }
+
+        //desliga o blend após desenhar imagens e barras
+        glDisable(GL_BLEND);
+
+        //Textos (O GLUT desenha bitmaps melhor sem Blend em alguns casos, ou com ele ligado.
+        // Se o texto ficar feio, reative o Blend aqui, mas geralmente para BitmapCharacter não precisa)
         char hudText[100];
         
-        // Cor do FPS (Verde/Amarelo/Vermelho)
         float fpsR = (fps < 30) ? 1.0f : ((fps < 55) ? 1.0f : 0.0f);
         float fpsG = (fps >= 30) ? 1.0f : 0.0f;
         
@@ -649,105 +663,35 @@ void drawHUD() {
         drawTextCentered(hudText, WIDTH / 2, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
 
         sprintf(hudText, "Tiros: %d", shotsRemaining);
-        drawTextCentered(hudText, 80, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
+        drawTextCentered(hudText, WIDTH / 2 + 150, HEIGHT - 35, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
         
-        // Instruções discretas no canto inferior
         glColor3f(1.0f, 1.0f, 1.0f);
         glRasterPos2f(10, 30);
-        const char* help = "Q/E: Profundidade  |  Mouse: Mirar e Atirar";
+        const char* help = "Scroll: Profundidade  |  Mouse: Mirar e Atirar  |  Botao Direito: Habilidade";
         for (const char* c = help; *c != '\0'; c++) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);
     }
 
-    // --- TELA DE FIM DE JOGO (OVERLAY) ---
     if (gameOver || gameWon || gameLost) {
-        // 1. Fundo escuro em toda a tela (Dimming)
-        glEnable(GL_BLEND);
+        glEnable(GL_BLEND); // Garante transparência para o fundo escuro
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glColor4f(0.0f, 0.0f, 0.0f, 0.75f);
-        glBegin(GL_QUADS);
-            glVertex2f(0, 0);
-            glVertex2f(WIDTH, 0);
-            glVertex2f(WIDTH, HEIGHT);
-            glVertex2f(0, HEIGHT);
-        glEnd();
-
-        // 2. Painel Central
-        float panelW = 400;
-        float panelH = 300;
-        float centerX = WIDTH / 2.0f;
-        float centerY = HEIGHT / 2.0f;
+        glBegin(GL_QUADS); glVertex2f(0, 0); glVertex2f(WIDTH, 0); glVertex2f(WIDTH, HEIGHT); glVertex2f(0, HEIGHT); glEnd();
         
-        // Fundo do Painel
-        glColor4f(0.2f, 0.2f, 0.2f, 0.9f); // Cinza escuro
-        glBegin(GL_QUADS);
-            glVertex2f(centerX - panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY + panelH/2);
-            glVertex2f(centerX - panelW/2, centerY + panelH/2);
-        glEnd();
+        float panelW = 400; float panelH = 300; float centerX = WIDTH / 2.0f; float centerY = HEIGHT / 2.0f;
+        glColor4f(0.2f, 0.2f, 0.2f, 0.9f);
+        glBegin(GL_QUADS); glVertex2f(centerX - panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY + panelH/2); glVertex2f(centerX - panelW/2, centerY + panelH/2); glEnd();
         
-        // Borda do Painel
-        glLineWidth(3.0f);
-        if (gameWon) {
-            glColor3f(0.2f, 0.8f, 0.2f);// Borda Verde se ganhou
-        } else {
-            glColor3f(0.8f, 0.2f, 0.2f);   
-        }// Borda Vermelha se perdeu
-            
+        glLineWidth(3.0f); if (gameWon) glColor3f(0.2f, 0.8f, 0.2f); else glColor3f(0.8f, 0.2f, 0.2f);
+        glBegin(GL_LINE_LOOP); glVertex2f(centerX - panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY - panelH/2); glVertex2f(centerX + panelW/2, centerY + panelH/2); glVertex2f(centerX - panelW/2, centerY + panelH/2); glEnd();
         
-        glBegin(GL_LINE_LOOP);
-            glVertex2f(centerX - panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY - panelH/2);
-            glVertex2f(centerX + panelW/2, centerY + panelH/2);
-            glVertex2f(centerX - panelW/2, centerY + panelH/2);
-        glEnd();
-
-        // 3. Textos
-        char title[50];
-        char scoreMsg[50];
+        char title[50]; char scoreMsg[50]; if (gameWon) sprintf(title, "VITORIA!"); else sprintf(title, "FIM DE JOGO"); sprintf(scoreMsg, "Pontuacao Final: %d", score);
+        drawTextCentered(title, centerX, centerY + 80, GLUT_BITMAP_TIMES_ROMAN_24, 1.0f, 1.0f, 1.0f); drawTextCentered(scoreMsg, centerX, centerY + 20, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 0.0f);
         
-        if (gameWon) sprintf(title, "VITORIA!");
-        else sprintf(title, "FIM DE JOGO");
+        float btnW = 200; float btnH = 50; float btnY = centerY - 80; if (gameWon) glColor3f(0.2f, 0.6f, 0.2f); else glColor3f(0.8f, 0.4f, 0.0f);
+        glBegin(GL_QUADS); glVertex2f(centerX - btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY + btnH/2); glVertex2f(centerX - btnW/2, btnY + btnH/2); glEnd();
         
-        sprintf(scoreMsg, "Pontuacao Final: %d", score);
-
-        // Desenha Título
-        drawTextCentered(title, centerX, centerY + 80, GLUT_BITMAP_TIMES_ROMAN_24, 1.0f, 1.0f, 1.0f);
-        
-        // Desenha Pontuação
-        drawTextCentered(scoreMsg, centerX, centerY + 20, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 0.0f); // Amarelo
-
-        // 4. Botão "REINICIAR"
-        float btnW = 200;
-        float btnH = 50;
-        float btnY = centerY - 80; // Posição Y do centro do botão
-
-        // Cor do botão (Verde se ganhou, Laranja se perdeu)
-        if (gameWon) glColor3f(0.2f, 0.6f, 0.2f);
-        else glColor3f(0.8f, 0.4f, 0.0f);
-
-        glBegin(GL_QUADS);
-            glVertex2f(centerX - btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY + btnH/2);
-            glVertex2f(centerX - btnW/2, btnY + btnH/2);
-        glEnd();
-
-        // Borda do botão (para dar destaque)
-        glColor3f(1.0f, 1.0f, 1.0f);
-        glLineWidth(1.0f);
-        glBegin(GL_LINE_LOOP);
-            glVertex2f(centerX - btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY - btnH/2);
-            glVertex2f(centerX + btnW/2, btnY + btnH/2);
-            glVertex2f(centerX - btnW/2, btnY + btnH/2);
-        glEnd();
-
-        // Texto do Botão
-        drawTextCentered("REINICIAR", centerX, btnY - 5, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f);
-        
-        // Dica extra
-        drawTextCentered("(Ou pressione 'R')", centerX, centerY - 130, GLUT_BITMAP_HELVETICA_12, 0.7f, 0.7f, 0.7f);
+        glColor3f(1.0f, 1.0f, 1.0f); glLineWidth(1.0f); glBegin(GL_LINE_LOOP); glVertex2f(centerX - btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY - btnH/2); glVertex2f(centerX + btnW/2, btnY + btnH/2); glVertex2f(centerX - btnW/2, btnY + btnH/2); glEnd();
+        drawTextCentered("REINICIAR", centerX, btnY - 5, GLUT_BITMAP_HELVETICA_18, 1.0f, 1.0f, 1.0f); drawTextCentered("(Ou pressione 'R')", centerX, centerY - 130, GLUT_BITMAP_HELVETICA_12, 0.7f, 0.7f, 0.7f);
     }
     
     glPopMatrix();
@@ -805,7 +749,7 @@ void resetGame() {
         filaPassaros.push_back(novoPassaro);
     }
 
-    // 5. POSICIONA A FILA
+    //inicia a fila dos pássaros
     float startX = -8.0f;  
     float startZ = 16.0f;  
     float gap = 1.8f;      
@@ -816,7 +760,7 @@ void resetGame() {
         filaPassaros[i]->setRotacaoVisual(0, 1, 0, M_PI / 2.0f); // Olhando para o cenário (M_PI / 2 para direita/fundo)
     }
 
-    // 6. Prepara o Primeiro Pássaro (Correção do Som)
+    //Prepara o Primeiro Pássaro
     itPassaroAtual = filaPassaros.begin();
     if (itPassaroAtual != filaPassaros.end()) {
         passaroAtual = *itPassaroAtual;
@@ -829,7 +773,7 @@ void resetGame() {
         passaroAtual->setRotacaoVisual(0, 1, 0, M_PI); // Rotação correta no estilingue
     }
 
-    // 7. Recria o Estilingue
+    //Recria o Estilingue
     g_slingshotManager = new SlingshotManager(dynamicsWorld, passaroAtual, &shotsRemaining, &gameOver);
     if (passaroAtual) g_slingshotManager->setProjectile(passaroAtual);
     
@@ -837,10 +781,9 @@ void resetGame() {
     printf("--- RESET CONCLUIDO ---\n");
 }
 
-// --- Callbacks do GLUT ---
 //modificações para mostrar a tela inicial
 void mouse(int button, int state, int x, int y) {
-    // --- LÓGICA DE CLIQUE NO BOTÃO REINICIAR (NOVA) ---
+    // Se o jogo acabou, verifica se clicou no botão "Reiniciar"
     if (gameOver || gameWon || gameLost) {
         if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
             // Recalcula a posição do botão (mesma lógica do drawHUD)
@@ -850,9 +793,6 @@ void mouse(int button, int state, int x, int y) {
             float btnW = 200;
             float btnH = 50;
 
-            // Importante: O mouse do GLUT tem Y=0 no topo. 
-            // O OpenGL (drawHUD) tem Y=0 no fundo.
-            // Convertemos o Y do mouse:
             float mouseY_GL = HEIGHT - y; 
 
             // Verifica colisão do mouse com o retângulo do botão
@@ -867,7 +807,6 @@ void mouse(int button, int state, int x, int y) {
         // Se o jogo acabou, não processa mais nada (não deixa atirar o estilingue)
         return; 
     }
-    // --------------------------------------------------
 
     if (g_currentState == STATE_GAME) {
         // Jogo normal
@@ -918,7 +857,6 @@ void passiveMouseMotion(int x, int y) {
 }
 
 void keyboard(unsigned char key, int x, int y) {
-    // --- 1. Lógica Global de Navegação (ESC) ---
     if (key == 27) { // Tecla ESC
         if (g_currentState == STATE_GAME) {
             g_audioManager.playPassaro(SomTipo::ENTRANDO_MENU, 100);
@@ -938,10 +876,9 @@ void keyboard(unsigned char key, int x, int y) {
         }
     }
 
-    // --- 2. Controles de Jogo (Só funcionam se estiver jogando) ---
+    // Controles específicos do estilingue
     if (g_currentState == STATE_GAME) {
         
-        // Delega as teclas do estilingue (Q/E)
         if (g_slingshotManager) {
             g_slingshotManager->handleKeyboard(key);
         }
@@ -988,7 +925,6 @@ void specialKeys(int key, int x, int y) {
     }
 }
 
-// --- Funções Principais (Display, Timer, Init) ---
 
 void display() {
     if (!jogoCarregado) {
@@ -1013,7 +949,6 @@ void display() {
     // Configuração da Câmera
     float angleH_rad = cameraAngleH * M_PI / 180.0f;
     float angleV_rad = cameraAngleV * M_PI / 180.0f;
-    
     float camX = cameraDistance * sin(angleH_rad) * cos(angleV_rad);
     float camY = cameraDistance * sin(angleV_rad);
     float camZ = cameraDistance * cos(angleH_rad) * cos(angleV_rad);
@@ -1035,9 +970,7 @@ void display() {
     if (g_slingshotManager) {
         g_slingshotManager->draw();
     }
-    
-    // Desenha o pássaro 'red'
-    // O 'red->desenhar()' usa a matriz do seu 'btRigidBody'
+    // Desenha o pássaro atual no estilingue ou em voo
     if (passaroAtual) {
         glMaterialf(GL_FRONT, GL_SHININESS, 0.0f);
         
@@ -1055,9 +988,9 @@ void display() {
         }
     }
 
-    // --- DESENHO DA FILA (NOVO) ---
+
+    // Desenha apenas se estiver no modo "Fila" e não for o atual
     for (auto* p : filaPassaros) {
-        // Desenha apenas se estiver no modo "Fila" e não for o atual
         if (p != passaroAtual && p->isNaFila()) {
             p->desenharNaFila(); // Usa o método novo que considera o pulinho
         }
@@ -1209,6 +1142,7 @@ void timer(int value) {
     if (passaroAtual) {
         passaroAtual->atualizar(deltaTime);
         if (!passaroAtual->isAtivo()) {
+            g_particleManager.createSmokeEffect(passaroAtual->getPosicao(), 20);
             proximoPassaro();
         }
     }
@@ -1217,6 +1151,7 @@ void timer(int value) {
     for (auto it = extraBirds.begin(); it != extraBirds.end(); ) {
         (*it)->atualizar(deltaTime);
         if (!(*it)->isAtivo()) {
+            g_particleManager.createSmokeEffect((*it)->getPosicao(), 20);
             delete *it;
             it = extraBirds.erase(it);
         } else {
@@ -1382,8 +1317,30 @@ void timer(int value) {
             }
             // Dano Porco
             if (porco) {
-                if (tempoDecorrido > 1.0f && impulsoTotal > 1.5f) {
-                    porco->tomarDano(impulsoTotal * 0.2f);
+                // 1. CHECAGEM DE SEGURANÇA:
+                // Se o Bullet detectou proximidade mas eles não estão se tocando, IGNORA.
+                // Isso impede que o porco tome dano de lava só por estar perto do chão.
+                if (contactManifold->getNumContacts() == 0) continue;
+
+                // Verifica se tocou no CHÃO VERDE
+                bool tocouNoChao = (obA == groundRigidBody || obB == groundRigidBody);
+
+                if (tocouNoChao) {
+                    // --- CASO 1: NO CHÃO (LAVA) ---
+                    // Agora só entra aqui se estiver realmente PISANDO no chão
+                    porco->tomarDano(0.5f * deltaTime); 
+
+                    // Dano de queda ALTA no chão
+                    if (impulsoTotal > 45.0f) {
+                        porco->tomarDano(impulsoTotal * 0.1f);
+                    }
+                } 
+                else {
+                    // --- CASO 2: NAS PLATAFORMAS ---
+                    // Força bruta alta para ignorar tremedeira e pulos na plataforma
+                    if (impulsoTotal > 60.0f) {
+                        porco->tomarDano(impulsoTotal * 0.2f);
+                    }
                 }
             }
         }
@@ -1531,6 +1488,12 @@ void init() {
     if (g_skyTextureID == 0) {
         printf("ERRO: Falha ao carregar a textura do ceu.\n");
     }
+
+    g_heartTextureID = loadGlobalTexture("Objetos/texturas/heart.png");
+    if (g_heartTextureID == 0) {
+        printf("AVISO: Textura do coracao nao encontrada em Objetos/coracao.png!\n");
+        // O jogo vai rodar, mas sem os corações.
+    }
     // 1. Inicializa a física
     initBullet();
     printf("DEBUG: initBullet concluido. dynamicsWorld = %p\n", dynamicsWorld);
@@ -1663,7 +1626,7 @@ void carregarJogo(int value) {
             printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
         }
 
-        g_audioManager.setVolume(10.0f); 
+        g_audioManager.setVolume(35.0f);
         g_audioManager.playMusic(MusicaTipo::MENU, 50); 
         
         glutMouseFunc(mouse);
@@ -1682,7 +1645,7 @@ void carregarJogo(int value) {
 int main(int argc, char** argv) {
     // 1. Inicialização Básica do GLUT (Janela)
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_STENCIL);
     glutInitWindowSize(WIDTH, HEIGHT);
     glutCreateWindow("Estilingue 3D - Angry C++ Birds"); // Mudei o título :)
     

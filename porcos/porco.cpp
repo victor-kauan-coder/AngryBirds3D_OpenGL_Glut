@@ -8,8 +8,10 @@
 #include <iostream>
 #include "../controle_audio/audio_manager.h"
 #include <cstdlib>
+#include "../blocos/ParticleManager.h"
 
 extern AudioManager g_audioManager;
+extern ParticleManager g_particleManager;
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -18,7 +20,7 @@ float randomFloat(float min, float max) {
     return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
 }
 
-Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial)
+Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial, int pontos)
     : rigidBody(nullptr),
       colisaoShape(nullptr),
       motionState(nullptr),
@@ -27,7 +29,7 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       raioColisao(0.5f),
       ativo(true),
       vidaMaxima(100.0f),
-      vida(2.5f),
+      vida(2.0f),
       massa(2.0f),
       tipo("Porco"),
       restituicao(0.5f),
@@ -36,7 +38,8 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       amortecimentoAngular(0.2f),
       timerPulo(0.0f),
       intervaloPulo(0.0f),
-      tempoSemDano(0.0f) { // 3 segundos para sumir após sair da posição
+      tempoSemDano(0.0f),
+      pontuacaoValor(pontos) { 
     
     carregarModelo("Objetos/porco.obj");
     carregarMTL("Objetos/porco.mtl");
@@ -172,7 +175,7 @@ void Porco::tomarDano(float dano) {
 
     tempoSemDano = 0.0f;
 
-    g_audioManager.playPassaro(SomTipo::DANO_PORCO, 60);
+    // g_audioManager.playPassaro(SomTipo::DANO_PORCO, 60);
     vida -= dano;
     std::cout << "Porco tomou " << dano << " de dano. Vida restante: " << vida << std::endl;
 
@@ -181,6 +184,16 @@ void Porco::tomarDano(float dano) {
         vida = 0;
         setAtivo(false);
         
+        // Efeito de fumaça na morte do porco
+        if (rigidBody) {
+            btTransform trans;
+            rigidBody->getMotionState()->getWorldTransform(trans);
+            g_particleManager.createSmokeEffect(trans.getOrigin(), 30);
+            if (pontuacaoValor > 0) {
+                g_particleManager.createScorePopup(trans.getOrigin(), pontuacaoValor); // Popup de pontuação
+            }
+        }
+
         // Remove o corpo do mundo da física para que não interaja mais
         if (mundoFisica && rigidBody) {
             mundoFisica->removeRigidBody(rigidBody);

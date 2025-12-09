@@ -13,6 +13,14 @@ enum class MaterialTipo {
 };
 
 
+enum class EstadoDano {
+    INTEIRO,
+    DANIFICADO,
+    MORRENDO,
+    DESTRUIDO
+};
+
+
 enum class MusicaTipo {
     MENU,
     JOGO,
@@ -52,5 +60,9 @@ enum class SomTipo {
     PORCO,
     ENTRANDO_MENU,
     SAINDO_MENU,
-    PORCO_PULANDO
+    PORCO_PULANDO,
+    CHUCK_SELECIONADO,
+    RED_SELECIONADO,
+    BLUE_SELECIONADO,
+    BOMB_SELECIONADO
 };

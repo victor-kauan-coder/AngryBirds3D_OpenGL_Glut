@@ -12,7 +12,8 @@ private:
     
     // Posição da luz (X, Y, Z, W)
     // W = 1.0f indica uma luz posicional (lâmpada/sol)
-    GLfloat lightPos[4] = {10.0f, 25.0f, 10.0f, 1.0f}; 
+    // Z alterado de 10.0f para 40.0f para iluminar a frente do estilingue (que está em Z=16)
+    GLfloat lightPos[4] = {10.0f, 25.0f, 40.0f, 1.0f}; 
 
 public:
     LightingManager() {}

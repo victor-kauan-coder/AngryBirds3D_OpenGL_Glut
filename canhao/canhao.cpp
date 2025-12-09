@@ -11,9 +11,9 @@ extern ParticleManager g_particleManager;
 extern AudioManager g_audioManager;
 
 Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* world, btVector3 targetPos)
-    : Porco(posX, posY, posZ, 0.5f, 1.4f), // Scale 3.0f similar to pigs
+    : Porco(posX, posY, posZ, 0.5f, 1.4f, 500), 
       timeSinceLastShot(0.0f),
-      shootInterval(6.0f), // Intervalo reduzido para 3 segundos para teste
+      shootInterval(6.0f), //
       targetPosition(targetPos),
       worldRef(world),
       lastVelocity(0,0,0),
@@ -21,11 +21,9 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
 {
     this->vidaMaxima = 50.0f;
     this->vida = 50.0f;
-    this->massa = 10.0f; // Heavier than a pig
+    this->massa = 10.0f; 
     this->escala = 5.0f;
-    // Load cannon model
-    // Note: The path is relative to the executable or working directory.
-    // Assuming "Objetos/" is in the working directory.
+    
     if (!carregarModelo("Objetos/conhao.obj")) {
         std::cout << "Erro ao carregar modelo do canhao (Objetos/conhao.obj)" << std::endl;
     }
@@ -33,20 +31,12 @@ Cannon::Cannon(float posX, float posY, float posZ, btDiscreteDynamicsWorld* worl
         std::cout << "Erro ao carregar textura do canhao (Objetos/conhao.mtl)" << std::endl;
     }
     
-    // Initialize physics with a box shape
     inicializarFisica(world, posX, posY, posZ);
 
-    // --- Rotação para mirar no estilingue ---
     if (rigidBody) {
         btVector3 cannonPos(posX, posY, posZ);
         btVector3 dir = targetPos - cannonPos;
         
-        // Calcula o ângulo Y (yaw) para apontar para o alvo
-        float yaw = atan2(dir.x(), dir.z());
-        
-        // Ajuste de rotação:
-        // Adicionamos M_PI/2 (90 graus) para rotacionar o modelo (que aponta para -Z ou +Z)
-        // para a direção correta.
         btQuaternion rotation(btVector3(0, 1, 0), M_PI/2); 
         
         btTransform trans = rigidBody->getWorldTransform();
@@ -69,10 +59,6 @@ Cannon::~Cannon() {
 void Cannon::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float posY, float posZ) {
     mundoFisica = mundo;
 
-    // Use a BoxShape for the cannon. 
-    // Assuming the normalized model fits in a box.
-    // Scale is 3.0, model is ~0.6. So size is ~1.8.
-    // Half extents should be around 0.9.
     colisaoShape = new btBoxShape(btVector3(0.9f, 0.9f, 0.9f)); 
 
     btTransform transform;
@@ -87,8 +73,8 @@ void Cannon::inicializarFisica(btDiscreteDynamicsWorld* mundo, float posX, float
     }
 
     btRigidBody::btRigidBodyConstructionInfo rbInfo(massa, motionState, colisaoShape, inerciaLocal);
-    rbInfo.m_restitution = 0.1f; // Low restitution
-    rbInfo.m_friction = 0.8f;    // High friction
+    rbInfo.m_restitution = 0.1f;
+    rbInfo.m_friction = 0.8f;  
 
     rigidBody = new btRigidBody(rbInfo);
     rigidBody->setUserPointer(this);
@@ -119,22 +105,19 @@ void Cannon::shoot() {
     // Spawn projectile slightly in front and above to avoid immediate collision
     btVector3 spawnPos = cannonPos + direction * 2.0f + btVector3(0, 1.0f, 0);
     
-    // Create projectile (Porco)
-    // Use a smaller scale for the projectile
-    projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f);    
-    // Load pig model for the projectile
+    //cria um porco para arremessar(vale 0 pontos)
+    projectile = new Porco(spawnPos.x(), spawnPos.y(), spawnPos.z(), 0.5f, 2.0f, 0);    
     
+    //coloca o porco no mundo de física e da a ele 1 de vida
     projectile->inicializarFisica(worldRef, spawnPos.x(), spawnPos.y(), spawnPos.z());
-    projectile->setVida(1.0f); // 1 HP as requested
+    projectile->setVida(1.0f); 
     
-    // Apply impulse
-    float force = 100.0f; // Adjust power as needed
-    // Add some upward arc
-    btVector3 impulse = direction * force + btVector3(0, 8.0f, 0);
-    projectile->getRigidBody()->applyCentralImpulse(impulse);
+    float force = 100.0f; 
+    btVector3 impulse = direction * force + btVector3(0, 8.0f, 0); // 8y para criar um lançamento em arco
+    projectile->getRigidBody()->applyCentralImpulse(impulse); //aplica o impulso para lançar o porco
     
     projectiles.push_back(projectile);
-    std::cout << "Canhao atirou!" << std::endl;
+    // std::cout << "Canhao atirou!" << std::endl;
 
     g_audioManager.playPassaro(SomTipo::SOM_CANHAO, 45);
     // Efeito de explosão ao atirar
@@ -144,7 +127,7 @@ void Cannon::shoot() {
 void Cannon::atualizar(float deltaTime) {
     if (!ativo) return;
 
-    // 1. Check if standing
+    //Check if standing
     if (rigidBody) {
         btTransform trans;
         rigidBody->getMotionState()->getWorldTransform(trans);
@@ -157,28 +140,27 @@ void Cannon::atualizar(float deltaTime) {
             return;
         }
         
-        // 2. Check for high impact (sudden velocity change)
+        
         btVector3 currentVel = rigidBody->getLinearVelocity();
         btVector3 deltaV = currentVel - lastVelocity;
-        if (deltaV.length() > 10.0f) { // Threshold for "certain power"
+        if (deltaV.length() > 10.0f) { 
              std::cout << "Canhao sofreu impacto forte!" << std::endl;
-             tomarDano(20.0f); // Take damage
+             tomarDano(20.0f); 
         }
         lastVelocity = currentVel;
     }
 
-    // 3. Shooting timer
+    
     timeSinceLastShot += deltaTime;
     if (timeSinceLastShot >= shootInterval) {
         shoot();
         timeSinceLastShot = 0.0f;
     }
 
-    // 4. Update projectiles
+    //atualiza porco
     for (auto it = projectiles.begin(); it != projectiles.end(); ) {
         (*it)->atualizar(deltaTime);
         
-        // Remove inactive projectiles
         if (!(*it)->isAtivo()) {
             delete *it;
             it = projectiles.erase(it);
@@ -191,7 +173,6 @@ void Cannon::atualizar(float deltaTime) {
 void Cannon::desenhar() {
     if (!ativo) return;
     
-    // --- Desenho do Canhão (Override de Porco::desenhar) ---
     if (rigidBody) {
         btTransform transform;
         rigidBody->getMotionState()->getWorldTransform(transform);
@@ -203,24 +184,18 @@ void Cannon::desenhar() {
         glMultMatrixf(matriz);
         glScalef(escala, escala, escala);
         
-        // REMOVIDO: glRotatef(180.0f, 0.0f, 1.0f, 0.0f); 
-        // A rotação agora é controlada puramente pela física (quaternion no construtor)
-
-        // Cor de fallback (caso a textura falhe)
-        // Cinza escuro metálico em vez de verde/vermelho de vida
         glColor3f(0.4f, 0.4f, 0.4f); 
 
         if (!modelo.vertices.empty()) {
             modelo.draw();
         } else {
-            // Fallback visual se o modelo não carregar
+
             glutSolidCube(1.0); 
         }
 
         glPopMatrix();
     }
     
-    // Draw projectiles
     for (auto p : projectiles) {
         p->desenhar();
     }
