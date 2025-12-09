@@ -29,7 +29,7 @@ Porco::Porco(float posX, float posY, float posZ, float raio, float escalaInicial
       raioColisao(0.5f),
       ativo(true),
       vidaMaxima(100.0f),
-      vida(2.5f),
+      vida(2.0f),
       massa(2.0f),
       tipo("Porco"),
       restituicao(0.5f),
@@ -175,7 +175,7 @@ void Porco::tomarDano(float dano) {
 
     tempoSemDano = 0.0f;
 
-    g_audioManager.playPassaro(SomTipo::DANO_PORCO, 60);
+    // g_audioManager.playPassaro(SomTipo::DANO_PORCO, 60);
     vida -= dano;
     std::cout << "Porco tomou " << dano << " de dano. Vida restante: " << vida << std::endl;
 

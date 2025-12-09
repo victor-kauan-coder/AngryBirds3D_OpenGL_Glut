@@ -132,6 +132,21 @@ void proximoPassaro() {
             
             // modificar para cada passaro
             // g_audioManager.playPassaro(SomTipo::LANCAMENTO_PASSARO, 50);
+            std::string tipo_passaro = passaroAtual->getTipo();
+
+            if (tipo_passaro == "Bomb") {
+                g_audioManager.playPassaro(SomTipo::BOMB_SELECIONADO, 100);
+            } 
+            else if (tipo_passaro == "Blue") {
+                g_audioManager.playPassaro(SomTipo::BLUE_SELECIONADO, 100);
+            } 
+            else if (tipo_passaro == "Chuck") {
+                g_audioManager.playPassaro(SomTipo::CHUCK_SELECIONADO, 120);
+            } 
+            else {
+                // Default: Som do Red ou genérico
+                g_audioManager.playPassaro(SomTipo::RED_SELECIONADO, 100);
+            }
         }
         
         // --- 2. FAZ A FILA ANDAR (CORRIGIDO) ---
@@ -488,8 +503,8 @@ void initBullet() {
     trees.push_back(Tree(-35.0f, 0.0f, -60.0f, 17.5f));
 
     // Par 3: Mais próximas do centro (mas atrás das torres)
-    trees.push_back(Tree( 12.0f, 0.0f, -65.0f, 18.0f));
-    trees.push_back(Tree(-12.0f, 0.0f, -65.0f, 18.0f));
+    trees.push_back(Tree( 12.0f, 0.0f, -59.0f, 18.0f));
+    trees.push_back(Tree(-12.0f, 0.0f, -59.0f, 18.0f));
 
 
     // === CAMADA 2: CAMPO MÉDIO (Ao redor das Torres) ===
@@ -633,7 +648,7 @@ void drawHUD() {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         // 1. PRIMEIRO: Fundo do HUD (Barra Preta Translúcida)
-        glColor4f(0.0f, 0.0f, 0.0f, 0.8f); // 50% transparente
+        glColor4f(0.0f, 0.0f, 0.0f, 0.4f); // 50% transparente
         glBegin(GL_QUADS);
             glVertex2f(0, HEIGHT);
             glVertex2f(0, HEIGHT - 60);
@@ -1367,8 +1382,30 @@ void timer(int value) {
             }
             // Dano Porco
             if (porco) {
-                if (tempoDecorrido > 1.0f && impulsoTotal > 1.5f) {
-                    porco->tomarDano(impulsoTotal * 0.2f);
+                // 1. CHECAGEM DE SEGURANÇA:
+                // Se o Bullet detectou proximidade mas eles não estão se tocando, IGNORA.
+                // Isso impede que o porco tome dano de lava só por estar perto do chão.
+                if (contactManifold->getNumContacts() == 0) continue;
+
+                // Verifica se tocou no CHÃO VERDE
+                bool tocouNoChao = (obA == groundRigidBody || obB == groundRigidBody);
+
+                if (tocouNoChao) {
+                    // --- CASO 1: NO CHÃO (LAVA) ---
+                    // Agora só entra aqui se estiver realmente PISANDO no chão
+                    porco->tomarDano(0.5f * deltaTime); 
+
+                    // Dano de queda ALTA no chão
+                    if (impulsoTotal > 45.0f) {
+                        porco->tomarDano(impulsoTotal * 0.1f);
+                    }
+                } 
+                else {
+                    // --- CASO 2: NAS PLATAFORMAS ---
+                    // Força bruta alta para ignorar tremedeira e pulos na plataforma
+                    if (impulsoTotal > 60.0f) {
+                        porco->tomarDano(impulsoTotal * 0.2f);
+                    }
                 }
             }
         }
@@ -1654,7 +1691,7 @@ void carregarJogo(int value) {
             printf("AVISO: Audio desabilitado devido a falha na inicializacao.\n");
         }
 
-        g_audioManager.setVolume(10.0f); 
+        g_audioManager.setVolume(35.0f);
         g_audioManager.playMusic(MusicaTipo::MENU, 50); 
         
         glutMouseFunc(mouse);
