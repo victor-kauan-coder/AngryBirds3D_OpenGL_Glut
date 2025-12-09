@@ -37,7 +37,7 @@ protected:
 
 public:
     Porco(float posX = 0.0f, float posY = 0.0f, float posZ = 0.0f, 
-        float raio = 0.2f, float escalaInicial = 2.3f, int pontos = 200);
+        float raio = 0.2f, float escalaInicial = 2.3f, int pontos = 5000);
     
     virtual ~Porco();
     

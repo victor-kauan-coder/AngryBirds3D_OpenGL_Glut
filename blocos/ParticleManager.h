@@ -254,20 +254,19 @@ public:
                 glPushMatrix();
                 glTranslatef(particles[i].pos.x(), particles[i].pos.y(), particles[i].pos.z());
                 
-                // Efeito Arco-íris baseado no tempo
-                float time = glutGet(GLUT_ELAPSED_TIME) * 0.002f;
-                float r = sin(time) * 0.5f + 0.5f;
-                float g = sin(time + 2.0f) * 0.5f + 0.5f;
-                float b = sin(time + 4.0f) * 0.5f + 0.5f;
-                glColor3f(r, g, b);
+                // Define a cor baseada no valor (Porco >= 5000)
+                float r, g, b;
+                if (particles[i].scoreValue >= 5000) {
+                    r = 0.2f; g = 1.0f; b = 0.2f; // Verde
+                } else {
+                    r = 1.0f; g = 1.0f; b = 1.0f; // Branco
+                }
 
-                // Escala para o texto não ficar gigante (Stroke fonts são grandes por padrão)
-                // Também faz o texto pulsar levemente
-                float pulse = 1.0f + sin(time * 5.0f) * 0.1f;
-                float scale = 0.01f * pulse; // Reduzido de 0.03f para 0.01f
+                // Escala fixa
+                float scale = 0.01f; 
                 glScalef(scale, scale, scale);
 
-                // Centraliza o texto (aproximado)
+                // Centraliza o texto
                 std::string text = "+" + std::to_string(particles[i].scoreValue);
                 float textWidth = 0;
                 for (char c : text) {
@@ -275,11 +274,28 @@ public:
                 }
                 glTranslatef(-textWidth / 2.0f, 0.0f, 0.0f);
 
-                // Desenha cada caractere
-                glLineWidth(3.0f); // Texto mais grosso
+                // Desabilita teste de profundidade para garantir que o texto fique visível e o preenchimento sobreponha o contorno
+                glDisable(GL_DEPTH_TEST);
+
+                // 1. Desenha o Contorno (Preto e Grosso)
+                glColor3f(0.0f, 0.0f, 0.0f);
+                glLineWidth(5.0f);
+                glPushMatrix(); // Salva posição inicial do texto
                 for (char c : text) {
                     glutStrokeCharacter(GLUT_STROKE_ROMAN, c);
                 }
+                glPopMatrix(); // Restaura posição inicial do texto
+
+                // 2. Desenha o Preenchimento (Cor e Fino)
+                glColor3f(r, g, b);
+                glLineWidth(2.0f);
+                for (char c : text) {
+                    glutStrokeCharacter(GLUT_STROKE_ROMAN, c);
+                }
+                
+                // Restaura configurações
+                glLineWidth(1.0f);
+                glEnable(GL_DEPTH_TEST);
                 
                 glPopMatrix();
             }
