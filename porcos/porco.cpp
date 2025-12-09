@@ -3,7 +3,6 @@
 #include <GL/glu.h>
 #include <cmath>
 #include "../util/loads.h"
-#include "../util/openGL_util.h"
 #include "porco.h"
 #include <iostream>
 #include "../controle_audio/audio_manager.h"

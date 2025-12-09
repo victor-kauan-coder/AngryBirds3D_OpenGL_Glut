@@ -15,7 +15,6 @@ class Passaro;
  */
 class SlingshotManager {
 private:
-    // --- Geometria do Estilingue (Posições) ---
     float damageCooldown;
     float handleBaseX, handleBaseY, handleBaseZ;
     float leftArmBaseX, leftArmBaseY, leftArmBaseZ;
@@ -24,7 +23,7 @@ private:
     float rightForkTipX, rightForkTipY, rightForkTipZ;
     float pouchPositionX, pouchPositionY, pouchPositionZ;
 
-    // --- Estado de Interação ---
+
     bool isPouchGrabbed;
     bool isBeingPulled; 
     int currentMouseX, currentMouseY;
@@ -32,24 +31,21 @@ private:
     float grabPouchStartX, grabPouchStartY, grabPouchStartZ;
     float pouchPullDepthZ;
 
-    // --- Referências Externas (Ponteiros) ---
+
     btDiscreteDynamicsWorld* worldRef;
     
-    // 3. MODIFICADO: Referência ao pássaro
-    // btCollisionShape* projectileShapeRef; // <-- Antigo
-    Passaro* projectileRef;                 // <-- Novo: Ponteiro para o pássaro
+    Passaro* projectileRef;                
     
     btRigidBody* projectileInPouch; 
     int* shotsRemainingRef;
     bool* isGameOverRef;
 
-    // --- Dano e Colisão do Estilingue ---
+
     int damageCount;
-    btRigidBody* slingshotBody; // Corpo físico do estilingue para colisões
-    OBJModel* slingshotModel; // Modelo 3D do estilingue
+    btRigidBody* slingshotBody; 
+    OBJModel* slingshotModel; 
     GLuint crackTextureID;
 
-    // --- Funções Internas (Privadas) ---
     void clearProjectile();
     void createProjectileInPouch();
     void launchProjectile();
@@ -60,19 +56,17 @@ private:
     void updateElasticReturnPhysics();
     void updatePouchPosition();
     void screenToWorld(int screenX, int screenY, float depth, float& worldX, float& worldY, float& worldZ);
-    void triggerGameOver(); // Chama o Game Over quando o estilingue quebra
-    void drawCracks();      // Desenha rachaduras baseadas no dano
+    void triggerGameOver(); 
+    void drawCracks();     
 
 public:
     /**
      * @brief Construtor do SlingshotManager.
      */
-    // 4. MODIFICADO: Construtor
-    // SlingshotManager(btDiscreteDynamicsWorld* world, btCollisionShape* shape, int* shots, bool* game_over); // <-- Antigo
-    SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* projectile, int* shots, bool* game_over);       // <-- Novo
-    ~SlingshotManager(); // Destrutor
+
+    SlingshotManager(btDiscreteDynamicsWorld* world, Passaro* projectile, int* shots, bool* game_over);    
+    ~SlingshotManager();
     
-    // --- Funções Públicas de Interface ---
 
     /**
      * @brief Calcula e define a geometria 3D do estilingue.
